@@ -1,4 +1,4 @@
-const directories = ['milo', 'feds', 'caas', 'uar'];
+const directories = ['milo', 'feds', 'caas', 'uar', 'uar-ai'];
 
 const HomePage = () => {
     return (
