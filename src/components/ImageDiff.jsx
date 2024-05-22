@@ -29,16 +29,34 @@ const ImageDiff = ({ data, timestamp }) => {
     }, {});
   };
 
+  const groupBySegmentDiffNumber = (data) => {
+    return Object.entries(data).reduce((acc, [category, comparisons]) => {
+      const segments = category.split('-');
+      const segment = segments[segments.length - 1].trim(); // Get the second segment
+      
+      if (!acc[segment]) {
+        acc[segment] = [];
+      }
+      
+      const diffNumber = comparisons.reduce((count, item) => item.diff ? count + 1 : count, 0);
+      
+      acc[segment].push(diffNumber);
+      return acc;
+    }, {});
+  };
+  
+
   // Group data
   const groupedData = groupByCategorySegment(data);
+  const groupDiffNumber = groupBySegmentDiffNumber(data);
 
   return (
     <div>
       <div className='text-xl m-3 text-blue-600'>Report Time: {timestamp}</div>
-      <div className='text-lg m-3 text-red-600'>Notes: no diff means the same, no image means not exist</div>
+      <div className='text-lg m-3 text-red-600'>Notes: no diff means the same, no image means not exist, number means how many diff images per key</div>
       <Tabs defaultActiveKey={Object.keys(groupedData)[0]} className="mb-3">
         {Object.entries(groupedData).map(([segment, items], idx) => (
-          <Tab eventKey={`tab-${segment}`} title={segment} key={idx}>
+          <Tab eventKey={`tab-${segment}`} title={`${segment}(${groupDiffNumber[segment]})`} key={idx}>
             {items.map(({ category, comparisons }, index) => (
               <div key={index}>
                 <h3>{index} - {category} [{comparisons[0].urls}]</h3>
