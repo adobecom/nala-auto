@@ -41,7 +41,7 @@ const ImageDiff = ({ data, timestamp }) => {
           <Tab eventKey={`tab-${segment}`} title={segment} key={idx}>
             {items.map(({ category, comparisons }, index) => (
               <div key={index}>
-                <h3>{index} - {category}</h3>
+                <h3>{index} - {category} [{comparisons[0].urls}]</h3>
                 <Table striped bordered hover>
                   <thead>
                     <tr>

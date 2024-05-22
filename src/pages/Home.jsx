@@ -15,7 +15,7 @@ const HomePage = () => {
                 <div className="text-2xl">Screenshot Tests:</div>
                 <div className='text-xl flex flex-row gap-6 m-3 flex-wrap'>
                     {directories.map((directory, index) => (
-                    <div className="card w-80 bg-base-100 shadow-xl flex-auto" key={index}>
+                    <div className="card w-80 bg-base-100 shadow-xl flex" key={index}>
                         <figure>
                         <img src="dog.jpg" alt={`${index}`} />
                         </figure>
