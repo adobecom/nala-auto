@@ -35,12 +35,12 @@ const ImageDiff = ({ data, timestamp }) => {
       const segment = segments[segments.length - 1].trim(); // Get the second segment
       
       if (!acc[segment]) {
-        acc[segment] = [];
+        acc[segment] = 0;
       }
       
       const diffNumber = comparisons.reduce((count, item) => item.diff ? count + 1 : count, 0);
       
-      acc[segment].push(diffNumber);
+      acc[segment] += diffNumber;
       return acc;
     }, {});
   };
@@ -53,7 +53,7 @@ const ImageDiff = ({ data, timestamp }) => {
   return (
     <div>
       <div className='text-xl m-3 text-blue-600'>Report Time: {timestamp}</div>
-      <div className='text-lg m-3 text-red-600'>Notes: no diff means the same, no image means not exist, number means how many diff images per key</div>
+      <div className='text-lg m-3 text-red-600'>Notes: no diff means the same, no image means not exist, number means how many diff images per device</div>
       <Tabs defaultActiveKey={Object.keys(groupedData)[0]} className="mb-3">
         {Object.entries(groupedData).map(([segment, items], idx) => (
           <Tab eventKey={`tab-${segment}`} title={`${segment}(${groupDiffNumber[segment]})`} key={idx}>
