@@ -8,8 +8,14 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        'custom-white': '#ffffff !important',
+        'custom-black': '#000000 !important',
+      },
+    },
   },
   plugins: [daisyui],
+  darkMode: 'class',
 }
 
