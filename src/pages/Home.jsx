@@ -35,7 +35,7 @@ const HomePage = () => {
                 <div className={`text-3xl text-center ${isDarkMode ? 'text-white' : 'text-black'}`}>Auto Tests</div>
             </div>
             <div className='pb-5'>
-                <div className={`text-2xl ${isDarkMode ? 'text-white' : 'text-black'}`}>Screenshot Tests:</div>
+                <div className={`m-2 text-2xl ${isDarkMode ? 'text-white' : 'text-black'}`}>Screenshot Tests:</div>
                 <div className='text-xl flex flex-row gap-6 m-3 flex-wrap'>
                     {directories.map((directory, index) => (
                     <div className="card w-80 bg-base-100 shadow-xl flex" key={index}>
