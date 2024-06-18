@@ -11,7 +11,7 @@ const ImageDiff = ({ data, timestamp }) => {
   const [show, setShow] = useState(false);
   const [leftImage, setLeftImage] = useState('');
   const [rightImage, setRightImage] = useState('');
-  const [showOnlyDiff, setShowOnlyDiff] = useState(false); // State to manage the filter
+  const [showOnlyDiff, setShowOnlyDiff] = useState(true); // State to manage the filter
 
   const handleClose = () => setShow(false);
   const handleShow = (leftImg, rightImg) => {
