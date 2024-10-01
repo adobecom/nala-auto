@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-const directories = ['sot', 'milo', 'feds', 'caas', 'uar', 'uar-ai', 'dc', 'bacom', 'graybox'];
+const directories = ['sot', 'milo', 'feds', 'caas', 'uar', 'uar-ai', 'dc', 'bacom', 'graybox-bacom'];
 
 const HomePage = () => {
     const [isDarkMode, setIsDarkMode] = useState(false);
