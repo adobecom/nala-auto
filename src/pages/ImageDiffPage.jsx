@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import ImageDiff from '../components/ImageDiff';
 
-async function getData(category) {
+async function getData(directory) {
   try {
-    const res = await fetch(`/api/milo/screenshots/${category}/results.json`, { cache: 'no-store' });
+    const res = await fetch(`/api/milo/screenshots/${directory}/results.json`, { cache: 'no-store' });
     if (!res.ok) {
       console.log(`HTTP error! status: ${res.status}`);
       return {};
@@ -16,9 +16,9 @@ async function getData(category) {
   }
 }
 
-async function getTimestamp(category) {
+async function getTimestamp(directory) {
   try {
-    const res = await fetch(`/api/milo/screenshots/${category}/timestamp.json`, { cache: 'no-store' });
+    const res = await fetch(`/api/milo/screenshots/${directory}/timestamp.json`, { cache: 'no-store' });
     return await res.json();
   } catch (error) {
     return '';
@@ -26,19 +26,19 @@ async function getTimestamp(category) {
 }
 
 const ImageDiffPage = () => {
-  const { category } = useParams();
+  const { directory } = useParams();
   const [data, setData] = useState({});
   const [timestamp, setTimestamp] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
-      const data = await getData(category);
-      const timestamp = await getTimestamp(category);
+      const data = await getData(directory);
+      const timestamp = await getTimestamp(directory);
       setData(data);
       setTimestamp(timestamp);
     };
     fetchData();
-  }, [category]);
+  }, [directory]);
 
   return (
     <div>
