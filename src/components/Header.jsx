@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 
@@ -10,6 +10,7 @@ const menuData = {
 };
 
 const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) => {
+  const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [hoveredMenu, setHoveredMenu] = useState(null);
   const menuRef = useRef(null);
@@ -36,6 +37,64 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
     }
   };
 
+  const handleJsonView = (item, e) => {
+    e.stopPropagation();
+    setHoveredMenu(null);
+    setIsMenuOpen(false);
+    navigate(`/json-viewer/${item}`);
+    window.location.reload();
+  };
+
+  const renderMenuItem = (item, menu) => {
+    if (menu === 'GRAYBOX') {
+      return (
+        <div key={item} className="py-1 hover:bg-gray-50 transition-colors duration-150">
+          <Link
+            to={`/imagediff/${item}`}
+            className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary flex items-center gap-2 group"
+            onClick={(e) => {
+              e.stopPropagation();
+              setHoveredMenu(null);
+              setIsMenuOpen(false);
+            }}
+          >
+            <svg className="w-4 h-4 text-gray-400 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span className="group-hover:translate-x-1 transition-transform">{item}</span>
+          </Link>
+          <button
+            className="w-full text-left px-4 py-2 text-sm text-gray-500 hover:text-primary flex items-center gap-2 pl-10 group hover:bg-gray-50"
+            onClick={(e) => handleJsonView(item, e)}
+          >
+            <svg className="w-4 h-4 text-gray-400 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+            </svg>
+            <span className="group-hover:translate-x-1 transition-transform">{item}-json</span>
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <Link
+        key={item}
+        to={`/imagediff/${item}`}
+        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 group flex items-center gap-2"
+        onClick={(e) => {
+          e.stopPropagation();
+          setHoveredMenu(null);
+          setIsMenuOpen(false);
+        }}
+      >
+        <svg className="w-4 h-4 text-gray-400 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <span className="group-hover:translate-x-1 transition-transform">{item}</span>
+      </Link>
+    );
+  };
+
   return (
     <nav className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4 sticky top-0 z-50 shadow-md`}>
       <div className="container mx-auto flex justify-between items-center">
@@ -59,28 +118,32 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
             {Object.keys(menuData).map((menu) => (
               <li key={menu} className="relative group">
                 <button
-                  className={`${isDarkMode ? 'text-white' : 'text-black'} hover:text-gray-500 px-3 py-2 rounded-md text-sm font-medium ${activeMenu === menu ? 'bg-primary text-white' : ''}`}
+                  className={`
+                    ${isDarkMode ? 'text-white hover:text-gray-300' : 'text-gray-700 hover:text-gray-900'}
+                    px-4 py-2 rounded-md text-sm font-medium transition-all duration-200
+                    ${activeMenu === menu ? 'bg-primary text-white shadow-lg scale-105' : 'hover:bg-gray-100'}
+                    flex items-center gap-2
+                  `}
                   onClick={() => handleMenuClick(menu)}
                 >
-                  {menu}
+                  <span>{menu}</span>
+                  <svg 
+                    className={`w-4 h-4 transition-transform duration-200 ${hoveredMenu === menu ? 'rotate-180' : ''}`} 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
                 </button>
                 
-                <div className={`${hoveredMenu === menu ? 'block' : 'hidden'} absolute left-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50`}>
-                  <div className="py-1">
-                    {menuData[menu].map((item) => (
-                      <Link
-                        key={item}
-                        to={`/imagediff/${item}`}
-                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setHoveredMenu(null);
-                          setIsMenuOpen(false);
-                        }}
-                      >
-                        {item}
-                      </Link>
-                    ))}
+                <div className={`
+                  ${hoveredMenu === menu ? 'block opacity-100 translate-y-0' : 'hidden opacity-0 -translate-y-2'} 
+                  absolute left-0 mt-2 w-56 rounded-lg shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50
+                  transform transition-all duration-200
+                `}>
+                  <div className="py-1 rounded-lg overflow-hidden">
+                    {menuData[menu].map((item) => renderMenuItem(item, menu))}
                   </div>
                 </div>
               </li>
