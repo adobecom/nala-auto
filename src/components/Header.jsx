@@ -9,11 +9,21 @@ const menuData = {
   DA: ['da-homepage', 'da-dc', 'da-cc', 'da-bacom', 'da-bacom-blog', 'da-feds']
 };
 
+const searchData = Object.values(menuData).flat().map(item => ({
+  title: item,
+  url: `/imagediff/${item}`,
+  type: 'page'
+}));
+
 const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) => {
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [hoveredMenu, setHoveredMenu] = useState(null);
   const menuRef = useRef(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -80,7 +90,7 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
       <Link
         key={item}
         to={`/imagediff/${item}`}
-        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 group flex items-center gap-2"
+        className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 group flex items-center gap-2"
         onClick={(e) => {
           e.stopPropagation();
           setHoveredMenu(null);
@@ -95,6 +105,92 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
     );
   };
 
+  const handleSearch = (query) => {
+    setSearchQuery(query);
+    if (query.trim() === '') {
+      setSearchResults([]);
+      return;
+    }
+
+    const filtered = searchData.filter(item =>
+      item.title.toLowerCase().includes(query.toLowerCase())
+    );
+    setSearchResults(filtered);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setIsSearching(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const searchBar = (
+    <div ref={searchRef} className="relative flex-1 max-w-xl mx-4">
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="Search..."
+          value={searchQuery}
+          onChange={(e) => handleSearch(e.target.value)}
+          onFocus={() => setIsSearching(true)}
+          className={`w-full px-4 py-2 rounded-lg border ${
+            isDarkMode 
+              ? 'bg-gray-800 border-gray-700 text-white' 
+              : 'bg-white border-gray-200 text-gray-900'
+          } focus:outline-none focus:ring-2 focus:ring-primary`}
+        />
+        <svg
+          className={`absolute right-3 top-2.5 w-5 h-5 ${
+            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+          }`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          />
+        </svg>
+      </div>
+
+      {isSearching && searchResults.length > 0 && (
+        <div className={`absolute mt-2 w-full rounded-lg shadow-lg ${
+          isDarkMode ? 'bg-gray-800' : 'bg-white'
+        } ring-1 ring-black ring-opacity-5 z-50`}>
+          <div className="py-1">
+            {searchResults.map((result) => (
+              <Link
+                key={result.title}
+                to={result.url}
+                onClick={() => {
+                  setIsSearching(false);
+                  setSearchQuery('');
+                }}
+                className={`block px-4 py-2 text-sm ${
+                  isDarkMode 
+                    ? 'text-gray-200 hover:bg-gray-700' 
+                    : 'text-gray-700 hover:bg-gray-50'
+                } transition-colors duration-150`}
+              >
+                {result.title}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <nav className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4 sticky top-0 z-50 shadow-md`}>
       <div className="container mx-auto flex justify-between items-center">
@@ -102,6 +198,10 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
           Auto Tests Dashboard
         </Link>
         
+        <div className="hidden md:block flex-1 max-w-xl mx-4">
+          {searchBar}
+        </div>
+
         <div className="md:hidden">
           <button 
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -156,6 +256,10 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
               </label>
             </li>
           </ul>
+        </div>
+
+        <div className="md:hidden block w-full mt-4">
+          {isMenuOpen && searchBar}
         </div>
       </div>
     </nav>

@@ -73,7 +73,7 @@ const ImageDiffPage = () => {
         activeMenu={activeMenu}
         setActiveMenu={setActiveMenu}
       />
-      <Breadcrumb items={breadcrumbItems} isDarkMode={isDarkMode} />
+      <Breadcrumb items={breadcrumbItems} isDarkMode={isDarkMode} activeMenu={activeMenu}/>
       <div className="container mx-auto p-4">
         <ImageDiff data={data} timestamp={timestamp} isDarkMode={isDarkMode} />
       </div>

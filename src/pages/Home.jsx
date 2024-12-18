@@ -45,7 +45,7 @@ const HomePage = () => {
                 activeMenu={activeMenu}
                 setActiveMenu={setActiveMenu}
             />
-            <Breadcrumb items={breadcrumbItems} isDarkMode={isDarkMode} />
+            <Breadcrumb items={breadcrumbItems} isDarkMode={isDarkMode} activeMenu={activeMenu}/>
 
             <div className='container mx-auto pb-5 pt-4'>
                 {/* Cards */}
