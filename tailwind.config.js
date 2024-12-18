@@ -1,21 +1,19 @@
-
-// eslint-disable-next-line no-undef
-const daisyui = require('daisyui')
-
-export default {
+module.exports = {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {
-      colors: {
-        'custom-white': '#ffffff !important',
-        'custom-black': '#000000 !important',
-      },
-    },
+    extend: {},
   },
-  plugins: [daisyui],
-  darkMode: 'class',
+  plugins: [require("daisyui")],
+  daisyui: {
+    themes: ["light", "dark"],
+    styled: true,
+    base: true,
+    utils: true,
+    logs: true,
+    rtl: false,
+  },
 }
 
