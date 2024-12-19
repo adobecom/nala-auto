@@ -11,30 +11,37 @@ const menuData = {
 
 const SHAREPOINT_BASE = 'https://adobe.sharepoint.com/:x:/r/sites/adobecom/';
 const PROMOTE_BASE = `${SHAREPOINT_BASE}_layouts/15/Doc.aspx?sourcedoc=%7B{id}%7D&file=promote-smoke.xlsx&action=default&mobileredirect=true`;
+const PROMOTE_BATCH_BASE = `${SHAREPOINT_BASE}_layouts/15/Doc.aspx?sourcedoc=%7B{id}%7D&file=promote-batch-2k.xlsx&action=default&mobileredirect=true`;
 
 const testResultsLinks = {
   'graybox-homepage': {
     promote: PROMOTE_BASE.replace('{id}', 'ED68EF15-FEE9-4E1F-BA59-DAC1E465C645'),
+    promotebatch: PROMOTE_BATCH_BASE.replace('{id}', '074FE327-957A-4BEF-B2A9-38D9599A98E6'),
     loc: `${SHAREPOINT_BASE}homepage-loc`
   },
   'graybox-dc': {
     promote: PROMOTE_BASE.replace('{id}', 'F7A2C477-5147-4973-A8C4-A4C26B64F9CD'),
+    promotebatch: PROMOTE_BATCH_BASE.replace('{id}', '88A67876-B936-47CC-B9DB-44338E7FC1C6'),
     loc: `${SHAREPOINT_BASE}dc-loc`
   },
   'graybox-cc': {
     promote: PROMOTE_BASE.replace('{id}', 'F61F81F7-F112-40EA-968F-2FAF01C2938D'),
+    promotebatch: PROMOTE_BATCH_BASE.replace('{id}', '609B570C-619C-461C-8668-7AC4C0D4253E'),
     loc: `${SHAREPOINT_BASE}cc-loc`
   },
   'graybox-bacom': {
     promote: PROMOTE_BASE.replace('{id}', 'BACF3853-3534-48AF-B252-2AAC17F0801D'),
+    promotebatch: PROMOTE_BATCH_BASE.replace('{id}', 'D5DAC35A-5828-4DCE-BAC8-364F014D0B27'),
     loc: 'https://main--bacom-graybox--adobecom.hlx.page/tools/loc?milolibs=locui&ref=main&repo=bacom-graybox&owner=adobecom&host=business.adobe.com&project=BACOM&referrer=https%3A%2F%2Fadobe.sharepoint.com%2F%3Ax%3A%2Fr%2Fsites%2Fadobecom%2F_layouts%2F15%2FDoc.aspx%3Fsourcedoc%3D%257B5888e09b-93a3-4bc7-8f0f-d751da9f5a89%257D%26action%3Deditnew'
   },
   'graybox-feds': {
     promote: PROMOTE_BASE.replace('{id}', 'A8238599-7245-462D-8863-BC37CACFAC32'),
+    promotebatch: PROMOTE_BATCH_BASE.replace('{id}', 'B140BBB4-AA58-4B3D-94C2-82CC43D673A3'),
     loc: `${SHAREPOINT_BASE}feds-loc`
   },
   'da-bacom-graybox': {
     promote: `${SHAREPOINT_BASE}da-bacom-promote`,
+    promotebatch: PROMOTE_BATCH_BASE.replace('{id}', 'xxxx'),
     loc: `${SHAREPOINT_BASE}da-bacom-loc`
   }
 };
@@ -120,7 +127,15 @@ const HomePage = () => {
                                             target="_blank"
                                             rel="noopener noreferrer"
                                         >
-                                            Promote Tests
+                                            Promote Smoke Test
+                                        </a>
+                                        <a 
+                                            className="btn btn-info w-full" 
+                                            href={testResultsLinks[directory]?.promotebatch}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >
+                                            Promote Batch(2k)
                                         </a>
                                         <a 
                                             className="btn btn-success w-full" 
