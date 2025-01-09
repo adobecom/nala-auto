@@ -39,6 +39,24 @@ const JsonViewerPage = () => {
         }
     };
 
+    const getJenkinsUrl = (type) => {
+        const baseUrl = 'https://nalaauto.ci.corp.adobe.com/view/0.Milo/job';
+        switch (type) {
+            case 'graybox-bacom':
+                return `${baseUrl}/GrayboxBacomTests`;
+            case 'graybox-cc':
+                return `${baseUrl}/GrayboxCCTests`;
+            case 'graybox-dc':
+                return `${baseUrl}/GrayboxDCTests`;
+            case 'graybox-homepage':
+                return `${baseUrl}/GrayboxHomepageTests`;
+            case 'graybox-feds':
+                return `${baseUrl}/GrayboxFedsTests`;
+            default:
+                return null;
+        }
+    };
+
     const fetchJsonData = async () => {
         setIsLoading(true);
         setError(null);
@@ -129,14 +147,24 @@ const JsonViewerPage = () => {
                 {jsonData && (
                     <div className={`card ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-xl`}>
                         <div className="card-body">
-                            <div className="form-control w-full max-w-xs mb-4">
-                                <input
-                                    type="text"
-                                    placeholder="Search pages..."
-                                    className="input input-bordered w-full"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
+                            <div className="flex justify-between items-center mb-4">
+                                <div className="form-control w-full max-w-xs">
+                                    <input
+                                        type="text"
+                                        placeholder="Search pages..."
+                                        className="input input-bordered w-full"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                    />
+                                </div>
+                                <a 
+                                    href={getJenkinsUrl(grayboxType)} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="btn btn-primary"
+                                >
+                                    View Jenkins Job
+                                </a>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="table table-zebra w-full">
@@ -147,7 +175,7 @@ const JsonViewerPage = () => {
                                             <th className="w-1/12">Console Errors</th>
                                             <th className="w-1/12">Network Errors</th>
                                             <th className="w-1/12">Status</th>
-                                            <th className="w-5/12">Details</th>
+                                            <th className="w-4/12">Details</th>
                                         </tr>
                                     </thead>
                                     <tbody>
