@@ -12,32 +12,33 @@ const menuData = {
 const SHAREPOINT_BASE = 'https://adobe.sharepoint.com/:x:/r/sites/adobecom/';
 const PROMOTE_BASE = `${SHAREPOINT_BASE}_layouts/15/Doc.aspx?sourcedoc=%7B{id}%7D&file=promote-smoke.xlsx&action=default&mobileredirect=true`;
 const PROMOTE_BATCH_BASE = `${SHAREPOINT_BASE}_layouts/15/Doc.aspx?sourcedoc=%7B{id}%7D&file=promote-batch-2k.xlsx&action=default&mobileredirect=true`;
+const LOC_BASE = `https://adobe.sharepoint.com/sites/adobecom/Shared%20Documents/Forms/AllItems.aspx?newTargetListUrl=%2Fsites%2Fadobecom%2FShared%20Documents&viewpath=%2Fsites%2Fadobecom%2FShared%20Documents%2FForms%2FAllItems%2Easpx&id=%2Fsites%2Fadobecom%2FShared%20Documents%2F{directory}%2Dgraybox%2Fdrafts%2Flocalization%2Fjackyloc&viewid=d776cf70%2D9b7e%2D4ab7%2Db9da%2D9e0f8e03a7d2`;
 
 const testResultsLinks = {
   'graybox-homepage': {
     promote: PROMOTE_BASE.replace('{id}', 'ED68EF15-FEE9-4E1F-BA59-DAC1E465C645'),
     promotebatch: PROMOTE_BATCH_BASE.replace('{id}', '074FE327-957A-4BEF-B2A9-38D9599A98E6'),
-    loc: `https://main--homepage-graybox--adobecom.hlx.page/tools/loc?milolibs=locui&ref=main&repo=homepage-graybox&owner=adobecom&referrer=https%3A%2F%2Fadobe.sharepoint.com%2F%3Ax%3A%2Fr%2Fsites%2Fadobecom%2F_layouts%2F15%2FDoc.aspx%3Fsourcedoc%3D%257B8DF8CA97-11CE-44F0-909A-EDFC600E6DFC%257D%26file%3Djackyhomepagegraybox.xlsx%26action%3Ddefault%26mobileredirect%3Dtrue`
+    loc: LOC_BASE.replace('{directory}', 'homepage')
   },
   'graybox-dc': {
     promote: PROMOTE_BASE.replace('{id}', 'F7A2C477-5147-4973-A8C4-A4C26B64F9CD'),
     promotebatch: PROMOTE_BATCH_BASE.replace('{id}', '88A67876-B936-47CC-B9DB-44338E7FC1C6'),
-    loc: `https://main--dc-graybox--adobecom.hlx.page/tools/loc?milolibs=locui&ref=main&repo=dc-graybox&owner=adobecom&host=www.adobe.com&project=DC&referrer=https%3A%2F%2Fadobe.sharepoint.com%2F%3Ax%3A%2Fr%2Fsites%2Fadobecom%2F_layouts%2F15%2FDoc.aspx%3Fsourcedoc%3D%257B97634E81-99C1-4CAF-A2D7-90FEEF8F4B8A%257D%26file%3Djackydcgraybox.xlsx%26action%3Ddefault%26mobileredirect%3Dtrue`
+    loc: LOC_BASE.replace('{directory}', 'dc')
   },
   'graybox-cc': {
     promote: PROMOTE_BASE.replace('{id}', 'F61F81F7-F112-40EA-968F-2FAF01C2938D'),
     promotebatch: PROMOTE_BATCH_BASE.replace('{id}', '609B570C-619C-461C-8668-7AC4C0D4253E'),
-    loc: `https://main--cc-graybox--adobecom.hlx.page/tools/loc?milolibs=locui&ref=main&repo=cc-graybox&owner=adobecom&project=Creative+Cloud&referrer=https%3A%2F%2Fadobe.sharepoint.com%2F%3Ax%3A%2Fr%2Fsites%2Fadobecom%2F_layouts%2F15%2FDoc.aspx%3Fsourcedoc%3D%257B92305211-37A5-45FD-B38D-B8BFE0E55869%257D%26file%3Djackyccgraybox.xlsx%26action%3Ddefault%26mobileredirect%3Dtrue`
+    loc: 'https://adobe.sharepoint.com/sites/adobecom/CC/Forms/AllItems.aspx?newTargetListUrl=%2Fsites%2Fadobecom%2FCC&viewpath=%2Fsites%2Fadobecom%2FCC%2FForms%2FAllItems%2Easpx&id=%2Fsites%2Fadobecom%2FCC%2Fwww%2Dgraybox%2Fdrafts%2Flocalization%2Fjackyloc&viewid=820c5cd2%2Dfd43%2D4244%2D92c4%2Dbe6ed86f524e'
   },
   'graybox-bacom': {
     promote: PROMOTE_BASE.replace('{id}', 'BACF3853-3534-48AF-B252-2AAC17F0801D'),
     promotebatch: PROMOTE_BATCH_BASE.replace('{id}', 'D5DAC35A-5828-4DCE-BAC8-364F014D0B27'),
-    loc: 'https://main--bacom-graybox--adobecom.hlx.page/tools/loc?milolibs=locui&ref=main&repo=bacom-graybox&owner=adobecom&host=business.adobe.com&project=BACOM&referrer=https%3A%2F%2Fadobe.sharepoint.com%2F%3Ax%3A%2Fr%2Fsites%2Fadobecom%2F_layouts%2F15%2FDoc.aspx%3Fsourcedoc%3D%257B5888e09b-93a3-4bc7-8f0f-d751da9f5a89%257D%26action%3Deditnew'
+    loc: LOC_BASE.replace('{directory}', 'bacom')
   },
   'graybox-feds': {
     promote: PROMOTE_BASE.replace('{id}', 'A8238599-7245-462D-8863-BC37CACFAC32'),
     promotebatch: PROMOTE_BATCH_BASE.replace('{id}', 'B140BBB4-AA58-4B3D-94C2-82CC43D673A3'),
-    loc: `https://main--federal--adobecom.hlx.page/tools/loc?milolibs=locui&ref=main&repo=federal-graybox&owner=adobecom&referrer=https%3A%2F%2Fadobe.sharepoint.com%2F%3Ax%3A%2Fr%2Fsites%2Fadobecom%2F_layouts%2F15%2FDoc.aspx%3Fsourcedoc%3D%257B649aec23-a159-404b-9e38-d8b4325a8708%257D%26action%3Deditnew`
+    loc: LOC_BASE.replace('{directory}', 'federal')
   },
   'da-bacom-graybox': {
     promote: `${SHAREPOINT_BASE}da-bacom-promote`,
