@@ -107,7 +107,18 @@ const JsonViewerPage = () => {
                 <div className="ml-2">
                     {errors.map((err, i) => (
                         <div key={i} className="text-sm mb-1">
-                            • {err}
+                            {type === 'Network Errors' ? (
+                                <a
+                                    href={err}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`${isDarkMode ? 'text-blue-400' : 'text-blue-600'} hover:underline`}
+                                >
+                                    • {err}
+                                </a>
+                            ) : (
+                                `• ${err}`
+                            )}
                         </div>
                     ))}
                 </div>
@@ -119,6 +130,35 @@ const JsonViewerPage = () => {
         { label: 'JSON Viewer' },
         { label: grayboxType }
     ];
+
+    const checkLinks = (links) => {
+        if (grayboxType === 'graybox-bacom') {
+            const businessLinks = links?.filter(link => 
+                link && link.includes('business.adobe.com')
+            ) || [];
+            
+            if (businessLinks.length > 0) {
+                return {
+                    hasError: true,
+                    errorLinks: businessLinks,
+                    message: 'Business links found in business graybox environment'
+                };
+            }
+        } else {
+            const wwwLinks = links?.filter(link => 
+                link && link.includes('www.adobe.com')
+            ) || [];
+
+            if (wwwLinks.length > 0) {
+                return {
+                    hasError: true,
+                    errorLinks: wwwLinks,
+                    message: 'www.adobe.com links found in non-www graybox environment'
+                };
+            }
+        }
+        return { hasError: false, errorLinks: [], message: '' };
+    };
 
     return (
         <div className={`${isDarkMode ? 'bg-black' : 'bg-white'} min-h-screen`}>
@@ -173,40 +213,37 @@ const JsonViewerPage = () => {
                                             <th className="w-1/6">Page</th>
                                             <th className="w-1/12">404 Errors</th>
                                             <th className="w-1/12">Console Errors</th>
-                                            <th className="w-1/12">Network Errors</th>
+                                            <th className="w-1/12">Links</th>
                                             <th className="w-1/12">Status</th>
                                             <th className="w-4/12">Details</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filteredData.map(([page, data]) => (
-                                            <tr key={page} className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
-                                                <td className="font-medium">{page}</td>
-                                                <td>{renderErrorCount(data.fourOFourErrors)}</td>
-                                                <td>{renderErrorCount(data.consoleErrors)}</td>
-                                                <td>{renderErrorCount(data.networkErrors)}</td>
-                                                <td>
-                                                    <span className={`badge ${
-                                                        (data.fourOFourErrors?.length || 
-                                                         data.consoleErrors?.length || 
-                                                         data.networkErrors?.length) 
-                                                            ? 'badge-error' 
-                                                            : 'badge-success'
-                                                    }`}>
-                                                        {(data.fourOFourErrors?.length || 
-                                                          data.consoleErrors?.length || 
-                                                          data.networkErrors?.length) 
-                                                            ? 'Failed' 
-                                                            : 'Passed'}
-                                                    </span>
-                                                </td>
-                                                <td className="max-w-xl whitespace-normal">
-                                                    {renderErrorDetails(data.fourOFourErrors, '404 Errors')}
-                                                    {renderErrorDetails(data.consoleErrors, 'Console Errors')}
-                                                    {renderErrorDetails(data.networkErrors, 'Network Errors')}
-                                                </td>
-                                            </tr>
-                                        ))}
+                                        {filteredData.map(([page, data]) => {
+                                            const linkCheck = checkLinks(data.links || []);
+                                            const hasErrors = data.fourOFourErrors?.length || 
+                                                            data.consoleErrors?.length || 
+                                                            linkCheck.hasError;
+
+                                            return (
+                                                <tr key={page} className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
+                                                    <td className="font-medium">{page}</td>
+                                                    <td>{renderErrorCount(data.fourOFourErrors)}</td>
+                                                    <td>{renderErrorCount(data.consoleErrors)}</td>
+                                                    <td>{renderErrorCount(linkCheck.errorLinks)}</td>
+                                                    <td>
+                                                        <span className={`badge ${hasErrors ? 'badge-error' : 'badge-success'}`}>
+                                                            {hasErrors ? 'Failed' : 'Passed'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="max-w-xl whitespace-normal">
+                                                        {renderErrorDetails(data.fourOFourErrors, '404 Errors')}
+                                                        {renderErrorDetails(data.consoleErrors, 'Console Errors')}
+                                                        {renderErrorDetails(linkCheck.errorLinks, 'Links Errors')}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
