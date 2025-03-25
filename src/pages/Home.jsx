@@ -4,7 +4,7 @@ import Breadcrumb from '../components/Breadcrumb';
 
 const menuData = {
   MILOCORE: ['sot', 'milo', 'caas', 'uar', 'uar-ai', 'feds'],
-  CONSUMER: ['homepage', 'dc', 'cc', 'bacom', 'bacom-blog'],
+  CONSUMER: ['homepage', 'dc', 'cc', 'bacom', 'bacom-blog', 'express'],
   GRAYBOX: ['graybox-homepage', 'graybox-dc', 'graybox-cc', 'graybox-bacom', 'graybox-feds', 'da-bacom-graybox'],
   DA: ['da-homepage', 'da-dc', 'da-cc', 'da-bacom', 'da-bacom-blog', 'da-feds']
 };
