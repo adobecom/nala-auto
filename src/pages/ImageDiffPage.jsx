@@ -27,10 +27,20 @@ async function getTimestamp(directory) {
   }
 }
 
+async function getTimestampBase(directory) {
+  try {
+    const res = await fetch(`/api/milo/screenshots/${directory}/timestampbase.json`, { cache: 'no-store' });
+    return await res.json();
+  } catch (error) {
+    return '';
+  }
+}
+
 const ImageDiffPage = () => {
   const { directory } = useParams();
   const [data, setData] = useState({});
   const [timestamp, setTimestamp] = useState('');
+  const [timestampBase, setTimestampBase] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeMenu, setActiveMenu] = useState('MILOCORE');
 
@@ -44,8 +54,14 @@ const ImageDiffPage = () => {
     const fetchData = async () => {
       const data = await getData(directory);
       const timestamp = await getTimestamp(directory);
+      const timestampBase = await getTimestampBase(directory);
       setData(data);
       setTimestamp(timestamp);
+      if (timestampBase) {
+        setTimestampBase(timestampBase);
+      } else {
+        setTimestampBase(timestamp);
+      }
     };
     fetchData();
   }, [directory]);
@@ -75,7 +91,7 @@ const ImageDiffPage = () => {
       />
       <Breadcrumb items={breadcrumbItems} isDarkMode={isDarkMode} activeMenu={activeMenu}/>
       <div className="container mx-auto p-4">
-        <ImageDiff data={data} timestamp={timestamp} isDarkMode={isDarkMode} />
+        <ImageDiff data={data} timestamp={timestamp} timestampBase={timestampBase} isDarkMode={isDarkMode} />
       </div>
     </div>
   );

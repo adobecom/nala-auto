@@ -7,7 +7,7 @@ import ImageTable from './ImageTable';
 const HOST = 'https://s3-sj3.corp.adobe.com/milo';
 
 // eslint-disable-next-line react/prop-types
-const ImageDiff = ({ data, timestamp }) => {
+const ImageDiff = ({ data, timestamp, timestampBase }) => {
   const [show, setShow] = useState(false);
   const [leftImage, setLeftImage] = useState('');
   const [rightImage, setRightImage] = useState('');
@@ -58,7 +58,8 @@ const ImageDiff = ({ data, timestamp }) => {
 
   return (
     <div>
-      <div className='text-xl m-3 text-blue-600'>Report Time: {timestamp}</div>
+      <div className='text-xl m-3 text-blue-600'>Report Time: {timestampBase} <span className='text-red-600'>Stable Version (base images)</span></div>
+      <div className='text-xl m-3 text-blue-600'>Report Time: {timestamp} <span className='text-red-600'>Beta Version</span></div>
       <div className='text-lg m-3 text-red-600'>Notes: a number specifies how many different images there are per device.</div>
       <div className="d-flex align-items-center m-3">
         <Form.Check 
