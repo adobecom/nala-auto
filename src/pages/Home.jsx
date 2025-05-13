@@ -18,31 +18,31 @@ const GRAYBOX_CONFIG_BASE = 'https://main--{directory}-graybox--adobecom.aem.pag
 
 const testResultsLinks = {
   'graybox-homepage': {
-    promote: PROMOTE_BASE.replace('{id}', 'ED68EF15-FEE9-4E1F-BA59-DAC1E465C645'),
+    promote: PROMOTE_BASE.replace('{id}', '9946776B-A9D2-46E3-986D-02831BB54F12'),
     promotebatch: PROMOTE_BATCH_BASE.replace('{id}', '074FE327-957A-4BEF-B2A9-38D9599A98E6'),
     loc: LOC_BASE.replace('{directory}', 'homepage'),
     promoteFiles: PROMOTE_SMOKE_FILES_BASE.replace('{directory}', 'homepage')
   },
   'graybox-dc': {
-    promote: PROMOTE_BASE.replace('{id}', 'F7A2C477-5147-4973-A8C4-A4C26B64F9CD'),
+    promote: PROMOTE_BASE.replace('{id}', '32424CED-6DCE-4CC5-978B-E615084B07C4'),
     promotebatch: PROMOTE_BATCH_BASE.replace('{id}', '88A67876-B936-47CC-B9DB-44338E7FC1C6'),
     loc: LOC_BASE.replace('{directory}', 'dc'),
     promoteFiles: PROMOTE_SMOKE_FILES_BASE.replace('{directory}', 'dc')
   },
   'graybox-cc': {
-    promote: PROMOTE_BASE.replace('{id}', 'F61F81F7-F112-40EA-968F-2FAF01C2938D'),
+    promote: PROMOTE_BASE.replace('{id}', '37D0371D-0195-4B03-8EA2-C9A907DD3799'),
     promotebatch: PROMOTE_BATCH_BASE.replace('{id}', '609B570C-619C-461C-8668-7AC4C0D4253E'),
     loc: 'https://adobe.sharepoint.com/sites/adobecom/CC/Forms/AllItems.aspx?newTargetListUrl=%2Fsites%2Fadobecom%2FCC&viewpath=%2Fsites%2Fadobecom%2FCC%2FForms%2FAllItems%2Easpx&id=%2Fsites%2Fadobecom%2FCC%2Fwww%2Dgraybox%2Fdrafts%2Flocalization%2Fjackyloc&viewid=820c5cd2%2Dfd43%2D4244%2D92c4%2Dbe6ed86f524e',
     promoteFiles: "https://adobe.sharepoint.com/sites/adobecom/CC/Forms/AllItems.aspx?newTargetListUrl=%2Fsites%2Fadobecom%2FCC&viewpath=%2Fsites%2Fadobecom%2FCC%2FForms%2FAllItems%2Easpx&id=%2Fsites%2Fadobecom%2FCC%2Fwww%2Dgraybox%2Fpromote%2Dsmoke&viewid=820c5cd2%2Dfd43%2D4244%2D92c4%2Dbe6ed86f524e"
   },
   'graybox-bacom': {
-    promote: PROMOTE_BASE.replace('{id}', 'BACF3853-3534-48AF-B252-2AAC17F0801D'),
+    promote: PROMOTE_BASE.replace('{id}', '22C5750A-A6AC-4C6E-9FF3-4E301D3A5CF7'),
     promotebatch: PROMOTE_BATCH_BASE.replace('{id}', 'D5DAC35A-5828-4DCE-BAC8-364F014D0B27'),
     loc: LOC_BASE.replace('{directory}', 'bacom'),
     promoteFiles: PROMOTE_SMOKE_FILES_BASE.replace('{directory}', 'bacom')
   },
   'graybox-federal': {
-    promote: PROMOTE_BASE.replace('{id}', 'A8238599-7245-462D-8863-BC37CACFAC32'),
+    promote: PROMOTE_BASE.replace('{id}', '71c416af-0c9a-4344-b43c-0d496646ff88'),
     promotebatch: PROMOTE_BATCH_BASE.replace('{id}', 'B140BBB4-AA58-4B3D-94C2-82CC43D673A3'),
     loc: LOC_BASE.replace('{directory}', 'federal'),
     promoteFiles: PROMOTE_SMOKE_FILES_BASE.replace('{directory}', 'federal')
