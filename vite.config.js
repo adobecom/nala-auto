@@ -5,6 +5,7 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   server: {
+    allowedHosts: ['nala-auto.corp.adobe.com'],
     proxy: {
       '/api': {
         target: 'https://s3-sj3.corp.adobe.com',
