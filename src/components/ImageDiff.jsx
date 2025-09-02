@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Table, Modal, Button, Tabs, Tab, Form } from 'react-bootstrap';
-import ReactCompareImage from 'react-compare-image';
+import { ImgComparisonSlider } from '@img-comparison-slider/react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import ImageTable from './ImageTable';
 
@@ -117,7 +117,10 @@ const ImageDiff = ({ data, timestamp, timestampBase }) => {
         </Modal.Header>
         <Modal.Body>
           {rightImage ? (
-            <ReactCompareImage leftImage={leftImage} rightImage={rightImage} />
+            <ImgComparisonSlider style={{ width: "100%", height: "auto" }}>
+              <img slot="first" src={leftImage} alt="Left image" style={{ width: "100%" }} />
+              <img slot="second" src={rightImage} alt="Right image" style={{ width: "100%" }} />
+            </ImgComparisonSlider>
           ) : (
             <img src={leftImage} alt="Preview" style={{ width: "100%" }} />
           )}

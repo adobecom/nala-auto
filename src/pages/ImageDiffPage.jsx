@@ -30,8 +30,13 @@ async function getTimestamp(directory) {
 async function getTimestampBase(directory) {
   try {
     const res = await fetch(`/api/milo/screenshots/${directory}/timestampbase.json`, { cache: 'no-store' });
+    if (!res.ok) {
+      console.log(`timestampbase.json not accessible (${res.status}), using timestamp instead`);
+      return '';
+    }
     return await res.json();
   } catch (error) {
+    console.log(`Error fetching timestampbase.json:`, error.message);
     return '';
   }
 }
