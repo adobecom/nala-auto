@@ -205,7 +205,7 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
   );
 
   return (
-    <nav className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4 sticky top-0 z-50 shadow-md`}>
+    <nav className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} px-4 py-2 sticky top-0 z-50 shadow-md`}>
       <div className="container mx-auto flex justify-between items-center">
         <Link to="/" className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-black'}`}>
           Auto Tests Dashboard
