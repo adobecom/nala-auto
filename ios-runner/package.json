@@ -1,0 +1,10 @@
+{
+  "name": "nala-ios-runner",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Drive real Mobile Safari on iOS Simulators via Appium (XCUITest) and capture screenshots.",
+  "dependencies": {
+    "webdriverio": "^9.0.0"
+  }
+}
