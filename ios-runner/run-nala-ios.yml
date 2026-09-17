@@ -75,13 +75,22 @@ jobs:
         id: urls
         run: echo "list=$(node ios-runner/site-urls.mjs '${{ inputs.site }}' '${{ inputs.milo_libs }}')" >> "$GITHUB_OUTPUT"
 
+      - name: Create a fresh (clean) Simulator for iOS ${{ matrix.ios }}
+        id: sim
+        run: echo "udid=$(./ios-runner/simulators.sh fresh '${{ inputs.device }}' '${{ matrix.ios }}')" >> "$GITHUB_OUTPUT"
+
       - name: Capture on iOS ${{ matrix.ios }}
         env:
           LAB_DEVICE: ${{ inputs.device }}
           LAB_VERSION: ${{ matrix.ios }}
+          LAB_UDID: ${{ steps.sim.outputs.udid }}
           LAB_URLS: ${{ steps.urls.outputs.list }}
           LAB_OUT: shots/${{ inputs.site }}/ios-${{ matrix.ios }}
         run: node ios-runner/run.mjs
+
+      - name: Dispose Simulator (clean up)
+        if: always()
+        run: ./ios-runner/simulators.sh rm '${{ steps.sim.outputs.udid }}' || true
 
       - name: Upload screenshots artifact
         uses: actions/upload-artifact@v4

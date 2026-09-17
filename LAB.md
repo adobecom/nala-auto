@@ -91,6 +91,18 @@ LAB_URLS='["https://www.adobe.com"]' LAB_OUT=./out \
   node run.mjs                              # → real Mobile Safari screenshot in ./out
 ```
 
+### Clean state per run (no VM needed)
+Each iOS job provisions a **fresh Simulator** (`simulators.sh fresh` → `simctl create`+boot) and
+deletes it afterward (`simulators.sh rm`, with `if: always()`), so every run starts factory-clean —
+no cookies, cache or Safari state carried over. That's the simulator equivalent of BrowserStack's
+fresh-device sessions; a full macOS VM is unnecessary (you're screenshotting public pages, not
+running untrusted code). Host macOS is shared across jobs (fine for web capture). For concurrency
+on one mini, give each parallel runner its own Appium port (`APPIUM_PORT`) — the fresh device name
+is already unique per job.
+
+Fastest way to prep a mini: `./ios-runner/setup-mini.sh 17.5 18.0` (run it in a logged-in GUI
+session — Simulators need an Aqua session, not a daemon).
+
 ### Wiring it into CI
 1. Copy `ios-runner/run-nala-ios.yml` → `<milo>/.github/workflows/`, and vendor the `ios-runner/`
    folder into that repo (or add a checkout step).

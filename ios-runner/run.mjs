@@ -14,6 +14,7 @@ const version = process.env.LAB_VERSION || '17.5';
 const outDir = process.env.LAB_OUT || './out';
 const host = process.env.APPIUM_HOST || '127.0.0.1';
 const port = Number(process.env.APPIUM_PORT || 4723);
+const udid = process.env.LAB_UDID || '';
 
 function parseUrls(raw) {
   if (!raw) return [];
@@ -42,13 +43,16 @@ const caps = {
   browserName: 'Safari',
   'appium:newCommandTimeout': 300,
   'appium:webviewConnectTimeout': 30000,
+  // When the workflow provisions a fresh (clean) simulator per job it passes
+  // its UDID; noReset then skips a redundant erase since it's already factory-clean.
+  ...(udid ? { 'appium:udid': udid, 'appium:noReset': true } : {}),
 };
 
 let browser;
 const shots = [];
 try {
   await mkdir(outDir, { recursive: true });
-  log(`[ios] connecting Appium ${host}:${port} → ${device} · iOS ${version}`);
+  log(`[ios] connecting Appium ${host}:${port} → ${device} · iOS ${version}${udid ? ` · ${udid}` : ''}`);
   browser = await remote({ hostname: host, port, path: '/', capabilities: caps, logLevel: 'error' });
 
   for (const url of urls) {

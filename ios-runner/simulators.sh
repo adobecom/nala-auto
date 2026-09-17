@@ -31,8 +31,23 @@ case "$cmd" in
   erase)
     xcrun simctl erase "${2:?usage: erase <udid>}"
     ;;
+  fresh)
+    # create a uniquely-named CLEAN device, boot it, wait, print its UDID
+    dev="${2:?usage: fresh <device> <iosVersion>}"
+    ver="${3:?usage: fresh <device> <iosVersion>}"
+    udid=$(xcrun simctl create "nala-fresh-$(date +%s)-$$" "${dev}" "iOS ${ver}")
+    xcrun simctl boot "${udid}"
+    xcrun simctl bootstatus "${udid}" >/dev/null 2>&1 || true
+    echo "${udid}"
+    ;;
+  rm)
+    # shut down + delete a device (clean teardown)
+    udid="${2:?usage: rm <udid>}"
+    xcrun simctl shutdown "${udid}" 2>/dev/null || true
+    xcrun simctl delete "${udid}"
+    ;;
   *)
-    echo "usage: $0 {list|ensure <ver>|create <device> <ver>|erase <udid>}"
+    echo "usage: $0 {list|ensure <ver>|create <device> <ver>|fresh <device> <ver>|erase <udid>|rm <udid>}"
     exit 1
     ;;
 esac
