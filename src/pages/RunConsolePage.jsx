@@ -33,6 +33,10 @@ const renderPill = (status, conclusion) => (
   </span>
 );
 
+// SharePoint folder where the screenshot-diff baseline data is updated.
+const DATA_URL =
+  'https://adobe.sharepoint.com/sites/adobecom/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2Fadobecom%2FShared%20Documents%2Fmilo%2Fdrafts%2Fnala%2Fscreenshotdiff%2Fdata&viewid=d776cf70%2D9b7e%2D4ab7%2Db9da%2D9e0f8e03a7d2';
+
 const RunConsolePage = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeMenu, setActiveMenu] = useState('MILOCORE');
@@ -234,6 +238,15 @@ const RunConsolePage = () => {
           >
             {isMock ? 'MOCK' : 'LIVE'}
           </span>
+          <a
+            href={DATA_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto text-sm text-sky-500 hover:underline"
+            title="Where the screenshot-diff baseline data is updated (SharePoint)"
+          >
+            📁 Baseline data ↗
+          </a>
         </div>
 
         {isMock && (
