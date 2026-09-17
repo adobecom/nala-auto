@@ -1,0 +1,14 @@
+{
+  "name": "nala-lab-backend",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Thin control-plane for nala-auto: dispatches & live-tracks the screenshot-diff GitHub Actions workflow.",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

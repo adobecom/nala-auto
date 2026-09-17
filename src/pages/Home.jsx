@@ -94,6 +94,11 @@ const HomePage = () => {
             <Breadcrumb items={breadcrumbItems} isDarkMode={isDarkMode} activeMenu={activeMenu}/>
 
             <div className='container mx-auto pb-5 pt-4'>
+                <div className='flex justify-center mb-6'>
+                    <a href='/console' className='btn btn-accent btn-lg gap-2 shadow-lg'>
+                        ▶ Run Console — trigger screenshot-diff &amp; track live
+                    </a>
+                </div>
                 <div className='text-xl flex flex-row gap-6 m-3 flex-wrap justify-center'>
                     {menuData[activeMenu].map((directory, index) => (
                         <div key={index} 
