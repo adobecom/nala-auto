@@ -4,7 +4,7 @@
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import * as gh from './github.js';
-import { createRun, getRun, attachClient } from './runner.js';
+import { createRun, getRun, attachClient, listRuns } from './runner.js';
 
 const PORT = process.env.LAB_PORT || 4000;
 
@@ -48,6 +48,10 @@ const server = http.createServer(async (req, res) => {
         defaultMilolibs: '?milolibs=stage',
         nalaAutoBase: process.env.NALA_AUTO_BASE || 'http://nala-auto.corp.adobe.com',
       });
+    }
+
+    if (p === '/lab/runs' && req.method === 'GET') {
+      return send(res, 200, listRuns());
     }
 
     if (p === '/lab/runs' && req.method === 'POST') {

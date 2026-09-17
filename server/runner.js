@@ -34,6 +34,7 @@ export function createRun(body = {}) {
     device,
     iosVersions,
     mode: live ? 'live' : 'mock',
+    startedAt: Date.now(),
     ghRunId: null,
     htmlUrl: null,
     status: 'dispatching',
@@ -61,6 +62,7 @@ export function createRun(body = {}) {
         jobs: this.jobs,
         resultsUrl: this.resultsUrl,
         done: this.done,
+        startedAt: this.startedAt,
       };
     },
   };
@@ -76,6 +78,15 @@ export function createRun(body = {}) {
 
 export function getRun(id) {
   return runs.get(id);
+}
+
+// Recent runs (most recent first) so the UI can rediscover in-flight runs
+// after a page refresh. In-memory only — a backend restart clears this.
+export function listRuns(limit = 20) {
+  return [...runs.values()]
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .slice(0, limit)
+    .map((r) => r.snapshot());
 }
 
 export function attachClient(id, ws) {

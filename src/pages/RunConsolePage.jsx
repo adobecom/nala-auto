@@ -43,6 +43,7 @@ const RunConsolePage = () => {
   const [device, setDevice] = useState('iPhone 15');
   const [selVersions, setSelVersions] = useState(['17.5', '18.0']);
   const [run, setRun] = useState(null);
+  const [runs, setRuns] = useState([]);
   const [busy, setBusy] = useState(false);
   const wsRef = useRef(null);
 
@@ -80,6 +81,53 @@ const RunConsolePage = () => {
     };
   }, []);
 
+  const refreshRuns = () => {
+    fetch('/lab/runs').then((r) => r.json()).then(setRuns).catch(() => {});
+  };
+
+  const openStream = (runId) => {
+    if (wsRef.current) {
+      try { wsRef.current.close(); } catch { /* noop */ }
+    }
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}/lab/stream?runId=${runId}`);
+    wsRef.current = ws;
+    ws.onmessage = (ev) => {
+      const m = JSON.parse(ev.data);
+      if (m.kind === 'update') {
+        setRun(m);
+        if (m.done) {
+          setBusy(false);
+          refreshRuns();
+        }
+      }
+    };
+    ws.onclose = () => setBusy(false);
+    ws.onerror = () => setBusy(false);
+  };
+
+  const attachToRun = async (runId) => {
+    try {
+      const snap = await (await fetch(`/lab/runs/${runId}`)).json();
+      setRun(snap);
+      setBusy(!snap.done);
+      if (!snap.done) openStream(runId);
+    } catch { /* noop */ }
+  };
+
+  // On load, rediscover runs so a page refresh reconnects to an in-flight run.
+  useEffect(() => {
+    fetch('/lab/runs')
+      .then((r) => r.json())
+      .then((list) => {
+        setRuns(list);
+        const active = list.find((r) => !r.done);
+        if (active) attachToRun(active.runId);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleThemeToggle = () => {
     setIsDarkMode((v) => {
       const nv = !v;
@@ -112,7 +160,13 @@ const RunConsolePage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      if (!res.ok) throw new Error(`backend returned ${res.status} — is the /lab server (server/) running on :4000?`);
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('backend not reachable — start it with `cd server && npm start`');
+      }
       setRun({
         runId: data.runId,
         runKind: kind,
@@ -127,20 +181,10 @@ const RunConsolePage = () => {
         resultsUrl: data.resultsUrl,
         done: false,
       });
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      const ws = new WebSocket(`${proto}://${location.host}/lab/stream?runId=${data.runId}`);
-      wsRef.current = ws;
-      ws.onmessage = (ev) => {
-        const m = JSON.parse(ev.data);
-        if (m.kind === 'update') {
-          setRun(m);
-          if (m.done) setBusy(false);
-        }
-      };
-      ws.onclose = () => setBusy(false);
-      ws.onerror = () => setBusy(false);
+      openStream(data.runId);
+      refreshRuns();
     } catch (e) {
-      setRun({ status: 'error', note: String(e), jobs: [] });
+      setRun({ status: 'error', note: e.message || String(e), jobs: [] });
       setBusy(false);
     }
   };
@@ -305,6 +349,38 @@ const RunConsolePage = () => {
             </div>
           </div>
         </div>
+
+        {/* Recent runs — survives refresh; click to re-attach (resumes live stream if running) */}
+        {runs.length > 0 && (
+          <div className={`mb-6 rounded-xl border shadow-sm ${card}`}>
+            <div className="p-4">
+              <div className={`mb-2 text-sm font-medium ${subtle}`}>Recent runs</div>
+              <div className="flex flex-col gap-1">
+                {runs.slice(0, 8).map((r) => (
+                  <button
+                    key={r.runId}
+                    onClick={() => attachToRun(r.runId)}
+                    className={`flex items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm ${
+                      run && run.runId === r.runId
+                        ? isDarkMode
+                          ? 'bg-gray-800'
+                          : 'bg-gray-100'
+                        : isDarkMode
+                          ? 'hover:bg-gray-800'
+                          : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    {renderPill(r.status, r.conclusion)}
+                    <span className={`font-mono ${subtle}`}>#{r.runId}</span>
+                    <span className={text}>{r.runKind === 'ios' ? `iOS · ${r.device}` : 'Viewport'}</span>
+                    <span className={`${subtle} truncate`}>{r.site}</span>
+                    {!r.done && <span className="ml-auto text-xs font-semibold text-sky-500">● live</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Live run panel */}
         {run && (
