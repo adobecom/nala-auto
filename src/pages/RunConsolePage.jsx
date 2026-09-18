@@ -435,7 +435,7 @@ const RunConsolePage = () => {
                   >
                     {renderPill(r.status, r.conclusion)}
                     <span className={`font-mono ${subtle}`}>#{r.runId}</span>
-                    <span className={text}>{r.runKind === 'ios' ? `iOS · ${r.device}` : 'Viewport'}</span>
+                    <span className={text}>{r.runKind === 'ios' ? `iOS · ${(r.devices || [r.device]).filter(Boolean).join(', ')}` : 'Viewport'}</span>
                     <span className={`${subtle} truncate`}>{r.site}</span>
                     {!r.done && <span className="ml-auto text-xs font-semibold text-sky-500">● live</span>}
                   </button>

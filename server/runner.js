@@ -4,12 +4,36 @@
 // LIVE mode dispatches the real workflow and polls its jobs; MOCK mode
 // simulates the same lifecycle so the UI is fully demoable with no token.
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as gh from './github.js';
 
 const runs = new Map();
 const NALA_BASE = process.env.NALA_AUTO_BASE || 'http://nala-auto.corp.adobe.com';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const mkJob = (name) => ({ name, status: 'queued', conclusion: null, htmlUrl: null });
+
+// Runs live in memory, but the backend restarts on every redeploy — which used
+// to drop all tracking while the GitHub workflow kept running. Persist the plain
+// run fields to disk so a restart reloads recent runs and resumes polling the
+// in-flight ones.
+const STATE_FILE =
+  process.env.RUNS_STATE_FILE ||
+  path.join(path.dirname(fileURLToPath(import.meta.url)), '.runs.json');
+const PLAIN_FIELDS = [
+  'id', 'kind', 'site', 'milolibs', 'device', 'devices', 'iosVersions', 'maxUrls',
+  'mode', 'startedAt', 'ghRunId', 'htmlUrl', 'status', 'conclusion', 'note', 'jobs',
+  'resultsUrl', 'done',
+];
+
+function persist() {
+  try {
+    const recent = [...runs.values()].sort((a, b) => b.startedAt - a.startedAt).slice(0, 30);
+    const data = recent.map((r) => Object.fromEntries(PLAIN_FIELDS.map((k) => [k, r[k]])));
+    fs.writeFileSync(STATE_FILE, JSON.stringify(data));
+  } catch { /* best effort — persistence must never break a run */ }
+}
 
 // Minimum iOS a device model can run (keep in sync with iosDeviceMinVersion in
 // index.js and min_ios() in run-nala-ios.yml). A model has no simulator build for
@@ -26,6 +50,38 @@ const pairRunnable = (d, v) => cmpVer(v, IOS_MIN[d] || '0') >= 0;
 // across the whole fleet. Override with IOS_RUNNERS if the pool grows/shrinks.
 export const IOS_RUNNERS = Math.max(1, Number(process.env.IOS_RUNNERS || 4));
 export const shardsFor = (combos) => Math.max(1, Math.floor(IOS_RUNNERS / Math.max(1, combos)));
+
+// Build a run object from plain fields (used both for new runs and for runs
+// reloaded from disk after a restart). snapshot() reads this.* only, so a
+// reconstructed object behaves identically.
+function makeRun(f) {
+  return {
+    ...f,
+    clients: new Set(),
+    snapshot() {
+      return {
+        kind: 'update',
+        runId: this.id,
+        runKind: this.kind,
+        site: this.site,
+        milolibs: this.milolibs,
+        device: this.device,
+        devices: this.devices,
+        iosVersions: this.iosVersions,
+        mode: this.mode,
+        status: this.status,
+        conclusion: this.conclusion,
+        note: this.note,
+        ghRunId: this.ghRunId,
+        htmlUrl: this.htmlUrl,
+        jobs: this.jobs,
+        resultsUrl: this.resultsUrl,
+        done: this.done,
+        startedAt: this.startedAt,
+      };
+    },
+  };
+}
 
 export function createRun(body = {}) {
   const kind = body.kind === 'ios' ? 'ios' : 'screenshot';
@@ -48,7 +104,7 @@ export function createRun(body = {}) {
           Array.from({ length: shards }, (_, s) => mkJob(`${d} · iOS ${v} · shard ${s + 1}/${shards}`)))
       : ['chrome', 'ipad', 'iphone'].map(mkJob);
 
-  const run = {
+  const run = makeRun({
     id,
     kind,
     site,
@@ -66,33 +122,11 @@ export function createRun(body = {}) {
     note: null,
     jobs: live ? [] : mockJobs,
     resultsUrl: `${NALA_BASE}/imagediff/${site}`,
-    clients: new Set(),
     done: false,
-    snapshot() {
-      return {
-        kind: 'update',
-        runId: id,
-        runKind: this.kind,
-        site,
-        milolibs,
-        device,
-        devices,
-        iosVersions,
-        mode: this.mode,
-        status: this.status,
-        conclusion: this.conclusion,
-        note: this.note,
-        ghRunId: this.ghRunId,
-        htmlUrl: this.htmlUrl,
-        jobs: this.jobs,
-        resultsUrl: this.resultsUrl,
-        done: this.done,
-        startedAt: this.startedAt,
-      };
-    },
-  };
+  });
 
   runs.set(id, run);
+  persist();
   (live ? driveLive(run) : driveMock(run)).catch((e) => {
     run.status = 'error';
     run.note = String(e);
@@ -131,6 +165,7 @@ export function attachClient(id, ws) {
 }
 
 function push(run) {
+  persist();
   const msg = JSON.stringify(run.snapshot());
   for (const ws of run.clients) {
     try {
@@ -179,6 +214,12 @@ async function driveLive(run) {
   run.status = found.status || 'queued';
   push(run);
 
+  await pollRun(run);
+}
+
+// Poll a run we already have a ghRunId for until it completes. Shared by a fresh
+// dispatch (driveLive) and by runs resumed from disk after a restart.
+async function pollRun(run) {
   for (;;) {
     const [r, jobs] = await Promise.all([gh.getRun(run.ghRunId), gh.getJobs(run.ghRunId)]);
     if (jobs && jobs.length) run.jobs = jobs;
@@ -195,6 +236,38 @@ async function driveLive(run) {
     await sleep(4000);
   }
 }
+
+// On startup, reload persisted runs and resume polling the ones still in flight
+// (so a redeploy doesn't lose a running job). Runs that were mid-dispatch when we
+// restarted (no ghRunId yet) can't be reattached — mark them so the UI is honest.
+function loadRuns() {
+  let data;
+  try {
+    data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+  } catch {
+    return;
+  }
+  if (!Array.isArray(data)) return;
+  for (const f of data) {
+    if (!f || !f.id) continue;
+    const run = makeRun(f);
+    runs.set(run.id, run);
+    if (run.done || run.mode !== 'live') continue;
+    if (run.ghRunId && gh.isLive()) {
+      pollRun(run).catch((e) => {
+        run.status = 'error';
+        run.note = String(e);
+        finish(run, 'failure');
+      });
+    } else {
+      run.status = 'error';
+      run.done = true;
+      run.note = 'Interrupted by a backend restart before the GitHub run was located — check GitHub Actions.';
+    }
+  }
+}
+
+loadRuns();
 
 async function driveMock(run) {
   run.status = 'queued';

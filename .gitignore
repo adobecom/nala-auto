@@ -27,3 +27,5 @@ dist-ssr
 .env*
 
 package-lock.json
+# Run console persisted run state (runtime only)
+server/.runs.json
