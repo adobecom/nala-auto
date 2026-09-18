@@ -203,7 +203,7 @@ const RunConsolePage = () => {
         runKind: kind,
         site,
         milolibs,
-        device,
+        devices: selDevices,
         mode: data.mode,
         status: 'dispatching',
         jobs: [],
