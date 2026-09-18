@@ -16,14 +16,17 @@ export function createRun(body = {}) {
   const site = (body.site || 'bacom').trim();
   const milolibs = (body.milolibs ?? '?milolibs=stage').trim();
   const device = (body.device || 'iPhone 15').trim();
+  const devices =
+    Array.isArray(body.devices) && body.devices.length ? body.devices : [device];
   const iosVersions =
-    Array.isArray(body.iosVersions) && body.iosVersions.length ? body.iosVersions : ['17.5'];
+    Array.isArray(body.iosVersions) && body.iosVersions.length ? body.iosVersions : ['18.3'];
+  const maxUrls = Number(body.maxUrls || 0);
   const id = randomUUID().slice(0, 8);
   const live = gh.isLive();
 
   const mockJobs =
     kind === 'ios'
-      ? iosVersions.map((v) => mkJob(`iOS ${v}`))
+      ? devices.flatMap((d) => iosVersions.map((v) => mkJob(`${d} · iOS ${v}`)))
       : ['chrome', 'ipad', 'iphone'].map(mkJob);
 
   const run = {
@@ -32,7 +35,9 @@ export function createRun(body = {}) {
     site,
     milolibs,
     device,
+    devices,
     iosVersions,
+    maxUrls,
     mode: live ? 'live' : 'mock',
     startedAt: Date.now(),
     ghRunId: null,
@@ -52,6 +57,7 @@ export function createRun(body = {}) {
         site,
         milolibs,
         device,
+        devices,
         iosVersions,
         mode: this.mode,
         status: this.status,
@@ -127,7 +133,8 @@ function inputsFor(run) {
       site: run.site,
       milo_libs: run.milolibs,
       ios_versions: run.iosVersions.join(','),
-      device: run.device,
+      devices: run.devices.join(','),
+      max_urls: String(run.maxUrls || 0),
     };
   }
   return { site: run.site, milo_libs: run.milolibs };

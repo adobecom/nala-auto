@@ -44,8 +44,8 @@ const RunConsolePage = () => {
   const [kind, setKind] = useState('screenshot'); // 'screenshot' | 'ios'
   const [site, setSite] = useState('bacom');
   const [milolibs, setMilolibs] = useState('?milolibs=stage');
-  const [device, setDevice] = useState('iPhone 15');
-  const [selVersions, setSelVersions] = useState(['17.5', '18.0']);
+  const [selDevices, setSelDevices] = useState(['iPhone 15']);
+  const [selVersions, setSelVersions] = useState(['18.3']);
   const [run, setRun] = useState(null);
   const [runs, setRuns] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -62,16 +62,16 @@ const RunConsolePage = () => {
         setConfig(c);
         if (c.sites?.length) setSite(c.sites[0]);
         if (c.defaultMilolibs) setMilolibs(c.defaultMilolibs);
-        if (c.iosDevices?.length) setDevice(c.iosDevices[0]);
-        if (c.iosVersions?.length) setSelVersions(c.iosVersions.slice(1));
+        if (c.iosDevices?.length) setSelDevices(c.iosDevices.slice(0, 1));
+        if (c.iosVersions?.length) setSelVersions(c.iosVersions.slice(0, 2));
       })
       .catch(() =>
         setConfig({
           mode: 'mock',
           sites: ['bacom'],
           shards: ['chrome', 'ipad', 'iphone'],
-          iosDevices: ['iPhone 15'],
-          iosVersions: ['16.4', '17.5', '18.0'],
+          iosDevices: ['iPhone 15', 'iPad Pro 11-inch (M4)'],
+          iosVersions: ['18.3'],
           defaultMilolibs: '?milolibs=stage',
           error: 'backend not reachable — start it with `cd server && npm i && npm start`',
         })
@@ -144,8 +144,11 @@ const RunConsolePage = () => {
   const toggleVersion = (v) =>
     setSelVersions((cur) => (cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]));
 
-  const sessions = kind === 'ios' ? selVersions.length : (config?.shards?.length || 3);
-  const canRun = !busy && (kind !== 'ios' || selVersions.length > 0);
+  const toggleDevice = (d) =>
+    setSelDevices((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d]));
+
+  const sessions = kind === 'ios' ? selDevices.length * selVersions.length : (config?.shards?.length || 3);
+  const canRun = !busy && (kind !== 'ios' || (selVersions.length > 0 && selDevices.length > 0));
 
   const start = async () => {
     setBusy(true);
@@ -156,7 +159,7 @@ const RunConsolePage = () => {
     }
     const body =
       kind === 'ios'
-        ? { kind, site, milolibs, iosVersions: selVersions, device }
+        ? { kind, site, milolibs, iosVersions: selVersions, devices: selDevices }
         : { kind, site, milolibs };
     try {
       const res = await fetch('/lab/runs', {
@@ -315,26 +318,28 @@ const RunConsolePage = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                <label className="block max-w-xs">
-                  <span className={`mb-1 block text-sm font-medium ${subtle}`}>Simulator device</span>
-                  <select
-                    className={`w-full rounded-lg border px-3 py-2 ${field}`}
-                    value={device}
-                    onChange={(e) => setDevice(e.target.value)}
-                  >
+                <div>
+                  <div className={`mb-2 text-sm font-medium ${subtle}`}>
+                    Devices — pick one or more (each device × version is one parallel job)
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     {(config?.iosDevices || ['iPhone 15']).map((d) => (
-                      <option key={d} value={d}>
+                      <button
+                        key={d}
+                        className={chip(selDevices.includes(d), false)}
+                        onClick={() => toggleDevice(d)}
+                      >
                         {d}
-                      </option>
+                      </button>
                     ))}
-                  </select>
-                </label>
+                  </div>
+                </div>
                 <div>
                   <div className={`mb-2 text-sm font-medium ${subtle}`}>
                     iOS versions — real Mobile Safari via Appium + Simulator (pick any)
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {(config?.iosVersions || ['16.4', '17.5', '18.0']).map((v) => (
+                    {(config?.iosVersions || ['18.3']).map((v) => (
                       <button
                         key={v}
                         className={chip(selVersions.includes(v), false)}
@@ -404,7 +409,7 @@ const RunConsolePage = () => {
                   <h2 className={`text-lg font-semibold ${text}`}>Run {run.runId ? `#${run.runId}` : ''}</h2>
                   {renderPill(run.status, run.conclusion)}
                   <span className={`text-sm ${subtle}`}>
-                    {run.runKind === 'ios' ? `iOS · ${run.device}` : 'Viewport'} · {run.site} · {run.milolibs}
+                    {run.runKind === 'ios' ? `iOS · ${(run.devices || [run.device].filter(Boolean)).join(', ')}` : 'Viewport'} · {run.site} · {run.milolibs}
                   </span>
                 </div>
                 <div className="flex gap-2">
