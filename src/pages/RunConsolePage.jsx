@@ -71,7 +71,7 @@ const RunConsolePage = () => {
           sites: ['bacom'],
           shards: ['chrome', 'ipad', 'iphone'],
           iosDevices: ['iPhone 16 Pro Max', 'iPhone 16 Pro', 'iPhone 16', 'iPad Pro 11-inch (M4)', 'iPad Air 11-inch (M2)'],
-          iosVersions: ['18.3'],
+          iosVersions: ['18.3', '17.5'],
           defaultMilolibs: '?milolibs=stage',
           error: 'backend not reachable — start it with `cd server && npm i && npm start`',
         })
