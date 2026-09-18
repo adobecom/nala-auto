@@ -76,6 +76,7 @@ const RunConsolePage = () => {
             'iPad Pro 11-inch (M4)': '17.4', 'iPad Air 11-inch (M2)': '17.5',
           },
           iosVersions: ['18.3', '17.5'],
+          iosRunners: 4,
           defaultMilolibs: '?milolibs=stage',
           error: 'backend not reachable — start it with `cd server && npm i && npm start`',
         })
@@ -163,8 +164,15 @@ const RunConsolePage = () => {
   const runnablePairs = selDevices.flatMap((d) => selVersions.filter((v) => pairRunnable(d, v)).map((v) => `${d} · iOS ${v}`));
   const skippedPairs = selDevices.flatMap((d) => selVersions.filter((v) => !pairRunnable(d, v)).map((v) => `${d} · iOS ${v} (needs ${minVer(d)}+)`));
 
-  const sessions = kind === 'ios' ? runnablePairs.length : (config?.shards?.length || 3);
-  const canRun = !busy && (kind !== 'ios' || runnablePairs.length > 0);
+  // Each combo's URLs are split across ~iosRunners runners: one device fans out
+  // over the whole fleet, many combos stay at 1 shard each (still one wave).
+  const iosRunners = Math.max(1, Number(config?.iosRunners || 4));
+  const combos = runnablePairs.length;
+  const shards = Math.max(1, Math.floor(iosRunners / Math.max(1, combos)));
+  const parallelJobs = combos * shards;
+
+  const sessions = kind === 'ios' ? combos : (config?.shards?.length || 3);
+  const canRun = !busy && (kind !== 'ios' || combos > 0);
 
   const start = async () => {
     setBusy(true);
@@ -390,7 +398,9 @@ const RunConsolePage = () => {
 
             <div className="flex items-center justify-end gap-4 border-t pt-4" style={{ borderColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
               <span className={`text-sm ${subtle}`}>
-                {sessions} session{sessions === 1 ? '' : 's'}
+                {kind === 'ios'
+                  ? `${combos} combo${combos === 1 ? '' : 's'}${shards > 1 ? ` × ${shards} shards → ${parallelJobs} parallel jobs` : ` → ${parallelJobs} parallel job${parallelJobs === 1 ? '' : 's'}`}`
+                  : `${sessions} session${sessions === 1 ? '' : 's'}`}
               </span>
               <button
                 className="rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white shadow transition hover:bg-indigo-700 disabled:opacity-50"

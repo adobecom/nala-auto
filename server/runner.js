@@ -21,6 +21,12 @@ const IOS_MIN = {
 const cmpVer = (a, b) => a.split('.').reduce((acc, n, i) => acc || Number(n) - (Number(b.split('.')[i]) || 0), 0);
 const pairRunnable = (d, v) => cmpVer(v, IOS_MIN[d] || '0') >= 0;
 
+// Target parallel iOS jobs (~= the ios-sim runner count). Each device x version
+// combo is split into floor(RUNNERS / combos) URL shards so one device fans out
+// across the whole fleet. Override with IOS_RUNNERS if the pool grows/shrinks.
+export const IOS_RUNNERS = Math.max(1, Number(process.env.IOS_RUNNERS || 4));
+export const shardsFor = (combos) => Math.max(1, Math.floor(IOS_RUNNERS / Math.max(1, combos)));
+
 export function createRun(body = {}) {
   const kind = body.kind === 'ios' ? 'ios' : 'screenshot';
   const site = (body.site || 'bacom').trim();
@@ -34,9 +40,12 @@ export function createRun(body = {}) {
   const id = randomUUID().slice(0, 8);
   const live = gh.isLive();
 
+  const runnablePairs = devices.flatMap((d) => iosVersions.filter((v) => pairRunnable(d, v)).map((v) => ({ d, v })));
+  const shards = shardsFor(runnablePairs.length);
   const mockJobs =
     kind === 'ios'
-      ? devices.flatMap((d) => iosVersions.filter((v) => pairRunnable(d, v)).map((v) => mkJob(`${d} · iOS ${v}`)))
+      ? runnablePairs.flatMap(({ d, v }) =>
+          Array.from({ length: shards }, (_, s) => mkJob(`${d} · iOS ${v} · shard ${s + 1}/${shards}`)))
       : ['chrome', 'ipad', 'iphone'].map(mkJob);
 
   const run = {
@@ -145,6 +154,7 @@ function inputsFor(run) {
       ios_versions: run.iosVersions.join(','),
       devices: run.devices.join(','),
       max_urls: String(run.maxUrls || 0),
+      max_parallel: String(IOS_RUNNERS),
     };
   }
   return { site: run.site, milo_libs: run.milolibs };

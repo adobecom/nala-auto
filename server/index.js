@@ -58,6 +58,10 @@ const server = http.createServer(async (req, res) => {
         // iOS versions are capped at 18.x on this Intel fleet (Xcode 16.2). Add
         // more by downloading the runtime on the runners (simulators.sh ensure).
         iosVersions: ['18.3', '17.5'],
+        // Target parallel iOS jobs (~= ios-sim runner count). Each device × version
+        // is split into floor(iosRunners / combos) URL shards, so one device runs
+        // across the whole fleet instead of one runner doing every URL serially.
+        iosRunners: Math.max(1, Number(process.env.IOS_RUNNERS || 4)),
         defaultMilolibs: '?milolibs=stage',
         nalaAutoBase: process.env.NALA_AUTO_BASE || 'http://nala-auto.corp.adobe.com',
       });
