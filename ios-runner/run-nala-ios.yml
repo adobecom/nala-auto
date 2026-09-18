@@ -1,13 +1,14 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Copy this into  <your milo repo>/.github/workflows/run-nala-ios.yml
 #
-# Real iOS Simulator screenshots on self-hosted macOS runners, dispatched by
-# nala-auto's Run Console (run kind: "ios"). Vendor the `ios-runner/` folder
-# from nala-auto into this repo (or add a checkout step) so the paths resolve.
+# Real iOS Simulator screenshots on self-hosted macOS runners — PURE simctl,
+# no Appium / no Node (only Xcode). Dispatched by nala-auto's Run Console (kind: ios).
+# Vendor the `ios-runner/` folder from nala-auto into this repo (or add a checkout).
 #
 # Prereqs on each [self-hosted, macOS, ios-sim] runner:
-#   - Xcode + the iOS runtimes you want (see ios-runner/simulators.sh)
-#   - Node 20+, jq, and network access to your S3 endpoint
+#   - Full Xcode 16 selected (`xcode-select -p` -> /Applications/Xcode*.app/...)
+#     with at least one iOS runtime, running in a logged-in GUI (Aqua) session
+#   - jq
 # ─────────────────────────────────────────────────────────────────────────────
 name: Nala iOS (Simulator) Screenshots
 
@@ -25,9 +26,9 @@ on:
         default: '?milolibs=stage'
         type: string
       ios_versions:
-        description: 'Comma-separated iOS versions, e.g. 16.4,17.5,18.0'
+        description: 'Comma-separated iOS versions, e.g. 17.5,18.3'
         required: true
-        default: '17.5'
+        default: '18.3'
         type: string
       device:
         description: 'Simulator device'
@@ -54,43 +55,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
-    timeout-minutes: 60
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
       - name: Ensure iOS runtime ${{ matrix.ios }}
         run: ./ios-runner/simulators.sh ensure "${{ matrix.ios }}" || true
 
-      - name: Install runner deps
-        run: cd ios-runner && (npm ci || npm install)
-
-      - name: Start Appium (XCUITest)
-        run: |
-          npm i -g appium
-          appium driver install xcuitest || true
-          (appium --relaxed-security > "$RUNNER_TEMP/appium.log" 2>&1 &)
-          npx --yes wait-on tcp:127.0.0.1:4723
-
       - name: Resolve URLs for ${{ inputs.site }}
         id: urls
-        run: echo "list=$(node ios-runner/site-urls.mjs '${{ inputs.site }}' '${{ inputs.milo_libs }}')" >> "$GITHUB_OUTPUT"
+        run: echo "list=$(./ios-runner/site-urls.sh '${{ inputs.site }}' '${{ inputs.milo_libs }}')" >> "$GITHUB_OUTPUT"
 
-      - name: Create a fresh (clean) Simulator for iOS ${{ matrix.ios }}
-        id: sim
-        run: echo "udid=$(./ios-runner/simulators.sh fresh '${{ inputs.device }}' '${{ matrix.ios }}')" >> "$GITHUB_OUTPUT"
-
-      - name: Capture on iOS ${{ matrix.ios }}
+      - name: Capture on iOS ${{ matrix.ios }} (fresh sim, simctl)
         env:
           LAB_DEVICE: ${{ inputs.device }}
           LAB_VERSION: ${{ matrix.ios }}
-          LAB_UDID: ${{ steps.sim.outputs.udid }}
           LAB_URLS: ${{ steps.urls.outputs.list }}
           LAB_OUT: shots/${{ inputs.site }}/ios-${{ matrix.ios }}
-        run: node ios-runner/run.mjs
-
-      - name: Dispose Simulator (clean up)
-        if: always()
-        run: ./ios-runner/simulators.sh rm '${{ steps.sim.outputs.udid }}' || true
+        run: ./ios-runner/simctl-capture.sh
 
       - name: Upload screenshots artifact
         uses: actions/upload-artifact@v4
@@ -98,7 +80,7 @@ jobs:
           name: ios-${{ inputs.site }}-${{ matrix.ios }}
           path: shots/${{ inputs.site }}/ios-${{ matrix.ios }}
 
-      # TODO(integration): push into the nala-auto results format so they show at
+      # TODO(integration): push into the nala-auto results format so shots show at
       # /imagediff/${{ inputs.site }} — reuse tools/screenshot-diff/lib/upload-one.js
       # with S3ACCESSKEY / S3SECRETKEY, matching results.json / timestamp.json.
       - name: Upload to S3 (nala-auto results)  # placeholder — wire to your uploader

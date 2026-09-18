@@ -43,8 +43,8 @@ const server = http.createServer(async (req, res) => {
         ...gh.config(),
         sites: SITES,
         shards: ['chrome', 'ipad', 'iphone'],
-        iosDevices: ['iPhone 15', 'iPhone SE (3rd generation)', 'iPad Pro 11-inch (M4)'],
-        iosVersions: ['16.4', '17.5', '18.0'],
+        iosDevices: ['iPhone 15', 'iPhone 16', 'iPad Pro 11-inch (M4)', 'iPad Air 11-inch (M2)', 'iPad (10th generation)'],
+        iosVersions: ['18.3'],
         defaultMilolibs: '?milolibs=stage',
         nalaAutoBase: process.env.NALA_AUTO_BASE || 'http://nala-auto.corp.adobe.com',
       });
