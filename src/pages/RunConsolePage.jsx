@@ -71,6 +71,10 @@ const RunConsolePage = () => {
           sites: ['bacom'],
           shards: ['chrome', 'ipad', 'iphone'],
           iosDevices: ['iPhone 16 Pro Max', 'iPhone 16 Pro', 'iPhone 16', 'iPad Pro 11-inch (M4)', 'iPad Air 11-inch (M2)'],
+          iosDeviceMinVersion: {
+            'iPhone 16 Pro Max': '18.0', 'iPhone 16 Pro': '18.0', 'iPhone 16': '18.0',
+            'iPad Pro 11-inch (M4)': '17.4', 'iPad Air 11-inch (M2)': '17.5',
+          },
           iosVersions: ['18.3', '17.5'],
           defaultMilolibs: '?milolibs=stage',
           error: 'backend not reachable — start it with `cd server && npm i && npm start`',
@@ -147,8 +151,20 @@ const RunConsolePage = () => {
   const toggleDevice = (d) =>
     setSelDevices((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d]));
 
-  const sessions = kind === 'ios' ? selDevices.length * selVersions.length : (config?.shards?.length || 3);
-  const canRun = !busy && (kind !== 'ios' || (selVersions.length > 0 && selDevices.length > 0));
+  // A device model has no simulator build for an iOS released before it (iPhone 16
+  // needs iOS 18+). Only offer/count device × version pairs that can actually run,
+  // so we never dispatch a run that silently falls back or reports "no device".
+  const cmpVer = (a, b) =>
+    a.split('.').reduce((acc, n, i) => acc || Number(n) - (Number(b.split('.')[i]) || 0), 0);
+  const minVer = (d) => (config?.iosDeviceMinVersion || {})[d] || '0';
+  const pairRunnable = (d, v) => cmpVer(v, minVer(d)) >= 0;
+  const deviceBlocked = (d) => selVersions.length > 0 && selVersions.every((v) => !pairRunnable(d, v));
+  const deviceConstrained = (d) => (config?.iosVersions || []).some((v) => !pairRunnable(d, v));
+  const runnablePairs = selDevices.flatMap((d) => selVersions.filter((v) => pairRunnable(d, v)).map((v) => `${d} · iOS ${v}`));
+  const skippedPairs = selDevices.flatMap((d) => selVersions.filter((v) => !pairRunnable(d, v)).map((v) => `${d} · iOS ${v} (needs ${minVer(d)}+)`));
+
+  const sessions = kind === 'ios' ? runnablePairs.length : (config?.shards?.length || 3);
+  const canRun = !busy && (kind !== 'ios' || runnablePairs.length > 0);
 
   const start = async () => {
     setBusy(true);
@@ -323,15 +339,23 @@ const RunConsolePage = () => {
                     Devices — pick one or more (each device × version is one parallel job)
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {(config?.iosDevices || ['iPhone 15']).map((d) => (
-                      <button
-                        key={d}
-                        className={chip(selDevices.includes(d), false)}
-                        onClick={() => toggleDevice(d)}
-                      >
-                        {d}
-                      </button>
-                    ))}
+                    {(config?.iosDevices || ['iPhone 15']).map((d) => {
+                      const blocked = deviceBlocked(d);
+                      return (
+                        <button
+                          key={d}
+                          className={chip(selDevices.includes(d), false)}
+                          style={blocked ? { opacity: 0.5, boxShadow: 'inset 0 0 0 1.5px #f59e0b' } : undefined}
+                          title={blocked ? `Needs iOS ${minVer(d)}+ — not runnable on the selected iOS version(s)` : undefined}
+                          onClick={() => toggleDevice(d)}
+                        >
+                          {d}
+                          {deviceConstrained(d) && (
+                            <span className="ml-1 opacity-60">· iOS {minVer(d)}+</span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
                 <div>
@@ -350,6 +374,17 @@ const RunConsolePage = () => {
                     ))}
                   </div>
                 </div>
+                {skippedPairs.length > 0 && (
+                  <div
+                    className="rounded-lg px-3 py-2 text-xs"
+                    style={{
+                      background: isDarkMode ? '#3f2d0b' : '#fef3c7',
+                      color: isDarkMode ? '#fcd34d' : '#92400e',
+                    }}
+                  >
+                    ⚠ Won&apos;t run (model needs a newer iOS): {skippedPairs.join(', ')}
+                  </div>
+                )}
               </div>
             )}
 

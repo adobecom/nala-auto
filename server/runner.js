@@ -11,6 +11,16 @@ const NALA_BASE = process.env.NALA_AUTO_BASE || 'http://nala-auto.corp.adobe.com
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const mkJob = (name) => ({ name, status: 'queued', conclusion: null, htmlUrl: null });
 
+// Minimum iOS a device model can run (keep in sync with iosDeviceMinVersion in
+// index.js and min_ios() in run-nala-ios.yml). A model has no simulator build for
+// an iOS released before it, so those pairs are dropped — never tracked or run.
+const IOS_MIN = {
+  'iPhone 16 Pro Max': '18.0', 'iPhone 16 Pro': '18.0', 'iPhone 16': '18.0',
+  'iPad Pro 11-inch (M4)': '17.4', 'iPad Air 11-inch (M2)': '17.5',
+};
+const cmpVer = (a, b) => a.split('.').reduce((acc, n, i) => acc || Number(n) - (Number(b.split('.')[i]) || 0), 0);
+const pairRunnable = (d, v) => cmpVer(v, IOS_MIN[d] || '0') >= 0;
+
 export function createRun(body = {}) {
   const kind = body.kind === 'ios' ? 'ios' : 'screenshot';
   const site = (body.site || 'bacom').trim();
@@ -26,7 +36,7 @@ export function createRun(body = {}) {
 
   const mockJobs =
     kind === 'ios'
-      ? devices.flatMap((d) => iosVersions.map((v) => mkJob(`${d} · iOS ${v}`)))
+      ? devices.flatMap((d) => iosVersions.filter((v) => pairRunnable(d, v)).map((v) => mkJob(`${d} · iOS ${v}`)))
       : ['chrome', 'ipad', 'iphone'].map(mkJob);
 
   const run = {

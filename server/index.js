@@ -45,6 +45,16 @@ const server = http.createServer(async (req, res) => {
         shards: ['chrome', 'ipad', 'iphone'],
         // Latest 2 iPhone + 2 iPad models (all ship with Xcode 16.2 — no install).
         iosDevices: ['iPhone 16 Pro Max', 'iPhone 16 Pro', 'iPhone 16', 'iPad Pro 11-inch (M4)', 'iPad Air 11-inch (M2)'],
+        // Minimum iOS a device model can run — a model has no simulator build for
+        // an iOS released before it (iPhone 16 needs iOS 18+). The console uses
+        // this to only offer runnable device × version pairs.
+        iosDeviceMinVersion: {
+          'iPhone 16 Pro Max': '18.0',
+          'iPhone 16 Pro': '18.0',
+          'iPhone 16': '18.0',
+          'iPad Pro 11-inch (M4)': '17.4',
+          'iPad Air 11-inch (M2)': '17.5',
+        },
         // iOS versions are capped at 18.x on this Intel fleet (Xcode 16.2). Add
         // more by downloading the runtime on the runners (simulators.sh ensure).
         iosVersions: ['18.3', '17.5'],
