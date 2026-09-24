@@ -85,8 +85,9 @@ async def relay(source, destination):
 async def handle(client_reader, client_writer):
     upstream_writer = None
     try:
-        await read_exact(client_reader, 12)
         client_writer.write(b"RFB 003.008\n")
+        await client_writer.drain()
+        await read_exact(client_reader, 12)
         client_writer.write(b"\x01\x01")  # One supported security type: None.
         await client_writer.drain()
         if await read_exact(client_reader, 1) != b"\x01":
