@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import Header from '../components/Header';
 import Breadcrumb from '../components/Breadcrumb';
+import {
+  fetchCustomDatasets,
+  addCustomDataset,
+  removeCustomDataset,
+  CUSTOM_DATASETS_EVENT,
+} from '../lib/customDatasets';
 
 const menuData = {
   MILOCORE: ['milo', 'caas', 'uar', 'feds'],
@@ -71,6 +77,11 @@ const initials = (s) => s.replace(/^(graybox|da)-/, '').slice(0, 2).toUpperCase(
 const HomePage = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeMenu, setActiveMenu] = useState('MILOCORE');
+  const [customDatasets, setCustomDatasets] = useState([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newDatasetName, setNewDatasetName] = useState('');
+  const [addError, setAddError] = useState('');
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     if (localStorage.getItem('theme') === 'dark') {
@@ -78,6 +89,41 @@ const HomePage = () => {
       document.documentElement.classList.add('dark');
     }
   }, []);
+
+  // Custom datasets are persisted server-side (shared across everyone), so
+  // keep this tab's copy fresh — on mount, and whenever this tab or another
+  // one adds/removes one.
+  useEffect(() => {
+    const refresh = () => fetchCustomDatasets().then(setCustomDatasets);
+    refresh();
+    window.addEventListener(CUSTOM_DATASETS_EVENT, refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.removeEventListener(CUSTOM_DATASETS_EVENT, refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, []);
+
+  const handleAddDataset = async (e) => {
+    e.preventDefault();
+    setAdding(true);
+    const name = await addCustomDataset(newDatasetName);
+    setAdding(false);
+    if (!name) {
+      setAddError('Enter a valid dataset name (letters, numbers, hyphens).');
+      return;
+    }
+    setCustomDatasets(await fetchCustomDatasets());
+    setNewDatasetName('');
+    setAddError('');
+    setShowAddForm(false);
+    setActiveMenu('CUSTOM');
+  };
+
+  const handleRemoveDataset = async (name) => {
+    await removeCustomDataset(name);
+    setCustomDatasets(await fetchCustomDatasets());
+  };
 
   const handleThemeToggle = () => {
     setIsDarkMode((v) => {
@@ -165,9 +211,110 @@ const HomePage = () => {
               </span>
             </button>
           ))}
+          <button className={tabBtn(activeMenu === 'CUSTOM')} onClick={() => setActiveMenu('CUSTOM')}>
+            CUSTOM
+            <span className={`ml-1.5 text-xs ${activeMenu === 'CUSTOM' ? 'text-indigo-200' : subtle}`}>
+              {customDatasets.length}
+            </span>
+          </button>
+          <button
+            onClick={() => {
+              setActiveMenu('CUSTOM');
+              setShowAddForm(true);
+            }}
+            className={`ml-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${isDarkMode ? 'bg-gray-800 text-indigo-300 hover:bg-gray-700' : 'bg-white text-indigo-600 ring-1 ring-gray-200 hover:bg-indigo-50'}`}
+            title="Add a new screenshot-diff dataset"
+          >
+            + Add dataset
+          </button>
         </div>
 
+        {/* Inline "add dataset" form */}
+        {showAddForm && (
+          <form onSubmit={handleAddDataset} className={`mb-5 flex flex-wrap items-center gap-2 rounded-xl border p-4 ${card}`}>
+            <input
+              autoFocus
+              type="text"
+              value={newDatasetName}
+              onChange={(e) => {
+                setNewDatasetName(e.target.value);
+                setAddError('');
+              }}
+              placeholder="dataset name, e.g. bacom-live-qa2"
+              className={`flex-1 min-w-[200px] rounded-lg border px-3 py-2 text-sm ${isDarkMode ? 'border-gray-700 bg-gray-800 text-gray-100' : 'border-gray-300 bg-white text-gray-900'}`}
+            />
+            <button
+              type="submit"
+              disabled={adding}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+            >
+              {adding ? 'Adding…' : 'Add'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddForm(false);
+                setNewDatasetName('');
+                setAddError('');
+              }}
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${isDarkMode ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}
+            >
+              Cancel
+            </button>
+            {addError && <div className="w-full text-xs text-red-500">{addError}</div>}
+            <div className={`w-full text-xs ${subtle}`}>
+              Adds a site name (shared with everyone) to the picker in <strong>▶ Run Console</strong>. It only shows
+              diffs once someone runs it there — the baseline URL list lives at{' '}
+              <code>https://milo.adobe.com/drafts/nala/screenshotdiff/data/&#123;name&#125;.json</code>.
+            </div>
+          </form>
+        )}
+
         {/* Site cards */}
+        {activeMenu === 'CUSTOM' ? (
+          customDatasets.length === 0 ? (
+            <div className={`rounded-xl border border-dashed p-8 text-center text-sm ${isDarkMode ? 'border-gray-700 text-gray-400' : 'border-gray-300 text-gray-500'}`}>
+              No custom datasets yet — click <strong>+ Add dataset</strong> above to add one.
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {customDatasets.map((directory) => (
+                <div key={directory} className={`relative flex flex-col rounded-xl border p-5 shadow-sm transition hover:shadow-md ${card}`}>
+                  <button
+                    onClick={() => handleRemoveDataset(directory)}
+                    title="Remove this dataset"
+                    className={`absolute right-3 top-3 text-xs ${isDarkMode ? 'text-gray-500 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
+                  >
+                    ✕
+                  </button>
+                  <div className="mb-3 flex items-center gap-3">
+                    <div className={`flex h-11 w-11 items-center justify-center rounded-lg bg-gradient-to-br ${gradientFor(directory)} text-sm font-bold text-white`}>
+                      {initials(directory)}
+                    </div>
+                    <div className="min-w-0">
+                      <div className={`truncate font-semibold ${text}`}>{directory}</div>
+                      <div className={`text-xs ${subtle}`}>Custom dataset</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <a
+                      href={`/console?site=${encodeURIComponent(directory)}`}
+                      className={`flex-1 rounded-lg border px-3 py-2 text-center text-sm font-semibold transition ${isDarkMode ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      ▶ Run
+                    </a>
+                    <a
+                      href={`/imagediff/${directory}`}
+                      className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-indigo-700"
+                    >
+                      Screenshot Diff →
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {menuData[activeMenu].map((directory) => {
             const isGraybox = directory.includes('graybox');
@@ -212,6 +359,7 @@ const HomePage = () => {
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );

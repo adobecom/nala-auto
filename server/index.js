@@ -5,15 +5,10 @@ import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import * as gh from './github.js';
 import { createRun, getRun, attachClient, listRuns } from './runner.js';
+import { getCustomSites, addCustomSite, removeCustomSite } from './customSites.js';
+import { BUILTIN_SITES } from './workflowSites.js';
 
 const PORT = process.env.LAB_PORT || 4000;
-
-// Sites come from the workflow_dispatch `site` choice options.
-const SITES = [
-  'bacom', 'bacom-blog', 'cc', 'da-marketo', 'da-marketo-prod', 'dc',
-  'express', 'graybox-bacom', 'graybox-cc', 'graybox-dc', 'graybox-upp',
-  'homepage', 'uar',
-];
 
 function send(res, status, body, headers = {}) {
   const data = Buffer.isBuffer(body) || typeof body === 'string' ? body : JSON.stringify(body);
@@ -41,7 +36,8 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, {
         mode: gh.isLive() ? 'live' : 'mock',
         ...gh.config(),
-        sites: SITES,
+        sites: [...BUILTIN_SITES, ...getCustomSites().filter((s) => !BUILTIN_SITES.includes(s))],
+        customSites: getCustomSites(),
         shards: ['chrome', 'ipad', 'iphone'],
         // Latest 2 iPhone + 2 iPad models (all ship with Xcode 16.2 — no install).
         iosDevices: ['iPhone 16 Pro Max', 'iPhone 16 Pro', 'iPhone 16', 'iPad Pro 11-inch (M4)', 'iPad Air 11-inch (M2)'],
@@ -65,6 +61,26 @@ const server = http.createServer(async (req, res) => {
         defaultMilolibs: '?milolibs=stage',
         nalaAutoBase: process.env.NALA_AUTO_BASE || 'http://nala-auto.corp.adobe.com',
       });
+    }
+
+    // Persisted, shared "add dataset" list — not per-browser localStorage.
+    // A site added here still needs to be run once (▶ Run Console) before
+    // its screenshot-diff results exist to view.
+    if (p === '/lab/sites' && req.method === 'GET') {
+      return send(res, 200, { sites: getCustomSites() });
+    }
+
+    if (p === '/lab/sites' && req.method === 'POST') {
+      const { name } = await readBody(req);
+      const added = addCustomSite(name);
+      if (!added) return send(res, 400, { error: 'invalid site name' });
+      return send(res, 200, { site: added, sites: getCustomSites() });
+    }
+
+    const delM = p.match(/^\/lab\/sites\/([^/]+)$/);
+    if (delM && req.method === 'DELETE') {
+      removeCustomSite(decodeURIComponent(delM[1]));
+      return send(res, 200, { sites: getCustomSites() });
     }
 
     if (p === '/lab/runs' && req.method === 'GET') {

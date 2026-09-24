@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Header from '../components/Header';
 import Breadcrumb from '../components/Breadcrumb';
 
@@ -38,11 +39,13 @@ const DATA_URL =
   'https://adobe.sharepoint.com/sites/adobecom/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2Fadobecom%2FShared%20Documents%2Fmilo%2Fdrafts%2Fnala%2Fscreenshotdiff%2Fdata&viewid=d776cf70%2D9b7e%2D4ab7%2Db9da%2D9e0f8e03a7d2';
 
 const RunConsolePage = () => {
+  const [searchParams] = useSearchParams();
+  const preselectedSite = searchParams.get('site');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeMenu, setActiveMenu] = useState('MILOCORE');
   const [config, setConfig] = useState(null);
   const [kind, setKind] = useState('screenshot'); // 'screenshot' | 'ios'
-  const [site, setSite] = useState('bacom');
+  const [site, setSite] = useState(preselectedSite || 'bacom');
   const [milolibs, setMilolibs] = useState('?milolibs=stage');
   const [selDevices, setSelDevices] = useState(['iPhone 15']);
   const [selVersions, setSelVersions] = useState(['18.3']);
@@ -60,7 +63,8 @@ const RunConsolePage = () => {
       .then((r) => r.json())
       .then((c) => {
         setConfig(c);
-        if (c.sites?.length) setSite(c.sites[0]);
+        if (preselectedSite && c.sites?.includes(preselectedSite)) setSite(preselectedSite);
+        else if (c.sites?.length) setSite(c.sites[0]);
         if (c.defaultMilolibs) setMilolibs(c.defaultMilolibs);
         if (c.iosDevices?.length) setSelDevices(c.iosDevices.slice(0, 1));
         if (c.iosVersions?.length) setSelVersions(c.iosVersions.slice(0, 2));
@@ -88,6 +92,7 @@ const RunConsolePage = () => {
         } catch { /* noop */ }
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refreshRuns = () => {

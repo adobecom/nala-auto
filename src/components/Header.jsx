@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
+import { fetchCustomDatasets, CUSTOM_DATASETS_EVENT } from '../lib/customDatasets';
 
 const menuData = {
   MILOCORE: ['milo', 'caas', 'uar', 'feds'],
@@ -8,12 +9,6 @@ const menuData = {
   GRAYBOX: ['graybox-homepage', 'graybox-dc', 'graybox-cc', 'graybox-bacom', 'graybox-feds'],
   DA: ['da-homepage', 'da-dc', 'da-cc', 'da-bacom', 'da-bacom-blog', 'da-feds']
 };
-
-const searchData = Object.values(menuData).flat().map(item => ({
-  title: item,
-  url: `/imagediff/${item}`,
-  type: 'page'
-}));
 
 const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) => {
   const navigate = useNavigate();
@@ -23,6 +18,33 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [customDatasets, setCustomDatasets] = useState([]);
+
+  // Custom datasets (added via the Home page "+ Add dataset" button) are
+  // persisted server-side (shared across everyone) — keep this nav in sync.
+  useEffect(() => {
+    const refresh = () => fetchCustomDatasets().then(setCustomDatasets);
+    refresh();
+    window.addEventListener(CUSTOM_DATASETS_EVENT, refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.removeEventListener(CUSTOM_DATASETS_EVENT, refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, []);
+
+  const displayMenuData = useMemo(
+    () => (customDatasets.length ? { ...menuData, CUSTOM: customDatasets } : menuData),
+    [customDatasets],
+  );
+
+  const searchData = useMemo(
+    () =>
+      Object.values(displayMenuData)
+        .flat()
+        .map((item) => ({ title: item, url: `/imagediff/${item}`, type: 'page' })),
+    [displayMenuData],
+  );
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -228,7 +250,7 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
 
         <div ref={menuRef} className={`md:flex ${isMenuOpen ? 'block' : 'hidden'} absolute md:relative top-16 md:top-0 left-0 right-0 md:right-auto ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} md:bg-transparent`}>
           <ul className="md:flex space-y-2 md:space-y-0 md:space-x-4 p-4 md:p-0">
-            {Object.keys(menuData).map((menu) => (
+            {Object.keys(displayMenuData).map((menu) => (
               <li key={menu} className="relative group">
                 <button
                   className={`
@@ -256,7 +278,7 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
                   transform transition-all duration-200
                 `}>
                   <div className="py-1 rounded-lg overflow-hidden">
-                    {menuData[menu].map((item) => renderMenuItem(item, menu))}
+                    {displayMenuData[menu].map((item) => renderMenuItem(item, menu))}
                   </div>
                 </div>
               </li>

@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as gh from './github.js';
+import { screenshotSiteInputs } from './workflowSites.js';
 
 const runs = new Map();
 const NALA_BASE = process.env.NALA_AUTO_BASE || 'http://nala-auto.corp.adobe.com';
@@ -192,7 +193,7 @@ function inputsFor(run) {
       max_parallel: String(IOS_RUNNERS),
     };
   }
-  return { site: run.site, milo_libs: run.milolibs };
+  return { ...screenshotSiteInputs(run.site), milo_libs: run.milolibs };
 }
 
 async function driveLive(run) {
