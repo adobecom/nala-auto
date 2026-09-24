@@ -30,6 +30,12 @@ async function simctl(...args) {
   return exec('xcrun', ['simctl', ...args]);
 }
 
+async function launchSimulator(udid) {
+  await exec('osascript', ['-e', 'tell application id "com.apple.iphonesimulator" to quit']).catch(() => {});
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  await exec('open', ['-a', 'Simulator', '--args', '-CurrentDeviceUDID', udid]);
+}
+
 async function createSession({ sessionId, device, iosVersion, url }) {
   if (!sessionId || !device || !iosVersion || !url) throw new Error('sessionId, device, iosVersion, and url are required.');
   const target = new URL(url);
@@ -46,7 +52,7 @@ async function createSession({ sessionId, device, iosVersion, url }) {
   const udid = (await simctl('create', name, deviceType.identifier, runtime.identifier)).stdout.trim();
   try {
     await simctl('boot', udid);
-    await exec('open', ['-a', 'Simulator', '--args', '-CurrentDeviceUDID', udid]);
+    await launchSimulator(udid);
     await simctl('openurl', udid, target.href);
   } catch (error) {
     await simctl('delete', udid).catch(() => {});
@@ -68,6 +74,7 @@ async function endSession(id) {
   active = null;
   if (expiryTimer) clearTimeout(expiryTimer);
   expiryTimer = null;
+  await exec('osascript', ['-e', 'tell application id "com.apple.iphonesimulator" to quit']).catch(() => {});
   await simctl('shutdown', udid).catch(() => {});
   await simctl('delete', udid).catch(() => {});
 }

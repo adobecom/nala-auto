@@ -71,6 +71,10 @@ export async function createManualSession({ device, iosVersion, url, owner = 'co
 export async function endManualSession(id) {
   clearExpiredSession();
   if (!session || session.id !== id) throw new Error('Manual iOS session not found.');
-  await agent(`/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  try {
+    await agent(`/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  } catch (error) {
+    if (error.message !== 'Manual iOS session not found.') throw error;
+  }
   session = null;
 }

@@ -29,6 +29,18 @@ const ManualIOSPage = () => {
       .catch(() => setError('Manual iOS service is unavailable. Try again shortly.'));
   }, []);
 
+  useEffect(() => {
+    if (!session?.expiresAt) return undefined;
+
+    const remaining = new Date(session.expiresAt).getTime() - Date.now();
+    const timeout = window.setTimeout(() => {
+      setSession(null);
+      setError('This manual iOS session has expired. Start a new session to continue.');
+    }, Math.max(0, remaining) + 1_000);
+
+    return () => window.clearTimeout(timeout);
+  }, [session?.expiresAt]);
+
   const handleThemeToggle = () => {
     setIsDarkMode((current) => {
       const next = !current;
@@ -125,6 +137,17 @@ const ManualIOSPage = () => {
                   >
                     {busy ? 'Ending…' : 'End session'}
                   </button>
+                </div>
+                <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm ${isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-50 text-gray-600'}`}>
+                  <span>If the Viewer shows the macOS login screen, click Accept and sign in as the Simulator account to reach the iPhone.</span>
+                  <a
+                    href={session.viewerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700"
+                  >
+                    Open Viewer in new tab
+                  </a>
                 </div>
                 <iframe
                   title="Manual iOS Simulator"
