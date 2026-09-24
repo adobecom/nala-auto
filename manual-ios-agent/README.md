@@ -19,3 +19,29 @@ export MANUAL_IOS_SESSION_TTL_MINUTES=30
 ```
 
 The agent permits one session at a time. It creates an ephemeral Simulator, opens Safari at the requested URL, and deletes that Simulator when the session ends or after 30 minutes. Use a process supervisor to restart the agent after host maintenance.
+
+## Passwordless noVNC viewer
+
+To avoid showing the macOS Screen Sharing password to browser users, run
+`rfb-bridge.py` on the same Mac. It authenticates to local Screen Sharing with
+a VNC password stored in a `chmod 600` file, then offers noVNC an
+unauthenticated RFB endpoint on `127.0.0.1:5901`. Point websockify at that
+endpoint instead of `127.0.0.1:5900`.
+
+This requires an administrator to enable **legacy VNC password authentication**
+on the dedicated Mac:
+
+```sh
+# Create an 8-character secret without echoing it. The legacy VNC protocol
+# limits passwords to eight characters; the file must remain local to the Mac.
+umask 077
+LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 8 > ~/manual-ios-pilot/vnc-password
+
+# Do not put this secret in Git, a browser URL, or JavaScript.
+sudo ./configure-legacy-vnc.sh /Users/auto/manual-ios-pilot/vnc-password
+```
+
+`configure-legacy-vnc.sh` also removes `manual-ios` from the macOS `admin`
+group. Restrict TCP/5900 to loopback with the host firewall; only the local
+bridge should reach Screen Sharing. The browser-facing noVNC endpoint stays on
+port 6080 and talks only to the bridge at `127.0.0.1:5901`.
