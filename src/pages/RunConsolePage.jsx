@@ -226,6 +226,17 @@ const RunConsolePage = () => {
   };
 
   const isMock = config?.mode !== 'live';
+  const pacificTime = (timestamp) =>
+    timestamp
+      ? new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/Los_Angeles',
+          hour: 'numeric',
+          minute: '2-digit',
+          month: 'short',
+          day: 'numeric',
+          timeZoneName: 'short',
+        }).format(new Date(timestamp))
+      : '';
   const page = isDarkMode ? 'bg-black' : 'bg-gray-50';
   const card = isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200';
   const text = isDarkMode ? 'text-gray-100' : 'text-gray-900';
@@ -442,6 +453,7 @@ const RunConsolePage = () => {
                     <span className={`font-mono ${subtle}`}>#{r.runId}</span>
                     <span className={text}>{r.runKind === 'ios' ? `iOS · ${(r.devices || [r.device]).filter(Boolean).join(', ')}` : 'Viewport'}</span>
                     <span className={`${subtle} truncate`}>{r.site}</span>
+                    {r.startedAt && <span className={`text-xs ${subtle}`}>{pacificTime(r.startedAt)}</span>}
                     {!r.done && <span className="ml-auto text-xs font-semibold text-sky-500">● live</span>}
                   </button>
                 ))}
