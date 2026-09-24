@@ -52,6 +52,10 @@ const RunConsolePage = () => {
   const [run, setRun] = useState(null);
   const [runs, setRuns] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [manualSession, setManualSession] = useState(null);
+  const [manualError, setManualError] = useState('');
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualUrl, setManualUrl] = useState('https://milo.adobe.com/');
   const wsRef = useRef(null);
 
   useEffect(() => {
@@ -63,6 +67,7 @@ const RunConsolePage = () => {
       .then((r) => r.json())
       .then((c) => {
         setConfig(c);
+        setManualSession(c.manualIos?.session || null);
         if (preselectedSite && c.sites?.includes(preselectedSite)) setSite(preselectedSite);
         else if (c.sites?.length) setSite(c.sites[0]);
         if (c.defaultMilolibs) setMilolibs(c.defaultMilolibs);
@@ -149,6 +154,40 @@ const RunConsolePage = () => {
       localStorage.setItem('theme', nv ? 'dark' : 'light');
       return nv;
     });
+  };
+
+  const startManualSession = async () => {
+    setManualBusy(true);
+    setManualError('');
+    try {
+      const response = await fetch('/lab/manual-ios/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device: selDevices[0], iosVersion: selVersions[0], url: manualUrl }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not start the manual iOS session.');
+      setManualSession(data);
+    } catch (error) {
+      setManualError(error.message);
+    } finally {
+      setManualBusy(false);
+    }
+  };
+
+  const endManualSession = async () => {
+    if (!manualSession) return;
+    setManualBusy(true);
+    setManualError('');
+    try {
+      const response = await fetch(`/lab/manual-ios/session/${encodeURIComponent(manualSession.id)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Could not end the manual iOS session.');
+      setManualSession(null);
+    } catch (error) {
+      setManualError(error.message);
+    } finally {
+      setManualBusy(false);
+    }
   };
 
   const toggleVersion = (v) =>
@@ -292,6 +331,53 @@ const RunConsolePage = () => {
             {config.error}
           </div>
         )}
+
+        <div className={`mb-6 rounded-xl border shadow-sm ${card}`}>
+          <div className="p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className={`font-semibold ${text}`}>Manual iOS Safari</h2>
+                <p className={`mt-1 text-sm ${subtle}`}>
+                  Reserve the dedicated Simulator Mac for interactive testing. This does not use GitHub Actions runners.
+                </p>
+              </div>
+              {config?.manualIos?.enabled ? (
+                manualSession ? (
+                  <button onClick={endManualSession} disabled={manualBusy} className="rounded-lg border border-rose-400 px-4 py-2 text-sm font-semibold text-rose-600 disabled:opacity-50">
+                    {manualBusy ? 'Ending…' : 'End session'}
+                  </button>
+                ) : (
+                  <button onClick={startManualSession} disabled={manualBusy || !selDevices.length || !selVersions.length} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                    {manualBusy ? 'Starting…' : 'Start manual session'}
+                  </button>
+                )
+              ) : (
+                <span className={`text-sm ${subtle}`}>Not configured yet</span>
+              )}
+            </div>
+            {!manualSession && (
+              <label className="mt-4 block">
+                <span className={`mb-1 block text-sm font-medium ${subtle}`}>URL to test</span>
+                <input
+                  type="url"
+                  value={manualUrl}
+                  onChange={(event) => setManualUrl(event.target.value)}
+                  placeholder="https://stage.example.com/"
+                  className={`w-full rounded-lg border px-3 py-2 ${field}`}
+                />
+              </label>
+            )}
+            {manualError && <div className="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">{manualError}</div>}
+            {manualSession && (
+              <div className="mt-4">
+                <div className={`mb-2 text-sm ${subtle}`}>
+                  {manualSession.device} · iOS {manualSession.iosVersion} · expires {new Date(manualSession.expiresAt).toLocaleTimeString()}
+                </div>
+                <iframe title="Manual iOS Simulator" src={manualSession.viewerUrl} className="h-[620px] w-full rounded-lg border" allow="clipboard-read; clipboard-write; fullscreen" />
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Controls */}
         <div className={`mb-6 rounded-xl border shadow-sm ${card}`}>

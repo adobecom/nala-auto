@@ -1,12 +1,14 @@
 // nala-auto run-console backend: dispatch + live-track the screenshot-diff
 // GitHub Actions workflow. Namespaced under /lab so it never collides with
 // the existing /api (S3) and /nala (Jenkins) vite proxies.
+/* global process, Buffer */
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import * as gh from './github.js';
 import { createRun, getRun, attachClient, listRuns } from './runner.js';
 import { getCustomSites, addCustomSite, removeCustomSite } from './customSites.js';
 import { BUILTIN_SITES } from './workflowSites.js';
+import { manualSessionConfig, createManualSession, endManualSession } from './manualSessions.js';
 
 const PORT = process.env.LAB_PORT || 4000;
 
@@ -60,6 +62,7 @@ const server = http.createServer(async (req, res) => {
         iosRunners: Math.max(1, Number(process.env.IOS_RUNNERS || 4)),
         defaultMilolibs: '?milolibs=stage',
         nalaAutoBase: process.env.NALA_AUTO_BASE || 'http://nala-auto.corp.adobe.com',
+        manualIos: manualSessionConfig(),
       });
     }
 
@@ -90,6 +93,16 @@ const server = http.createServer(async (req, res) => {
     if (p === '/lab/runs' && req.method === 'POST') {
       const run = createRun(await readBody(req));
       return send(res, 200, { runId: run.id, mode: run.mode, resultsUrl: run.resultsUrl });
+    }
+
+    if (p === '/lab/manual-ios/session' && req.method === 'POST') {
+      return send(res, 201, await createManualSession(await readBody(req)));
+    }
+
+    const manualMatch = p.match(/^\/lab\/manual-ios\/session\/([^/]+)$/);
+    if (manualMatch && req.method === 'DELETE') {
+      await endManualSession(decodeURIComponent(manualMatch[1]));
+      return send(res, 204, '');
     }
 
     const m = p.match(/^\/lab\/runs\/([\w-]+)$/);
