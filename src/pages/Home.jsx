@@ -180,6 +180,12 @@ const HomePage = () => {
               ▶ Run Console
             </a>
             <a
+              href="/manual-ios"
+              className={`rounded-lg px-4 py-2.5 text-sm font-semibold ${isDarkMode ? 'bg-gray-800 text-emerald-300 hover:bg-gray-700' : 'bg-white text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-50'}`}
+            >
+              📱 Manual iOS Safari
+            </a>
+            <a
               href={DATA_URL}
               target="_blank"
               rel="noopener noreferrer"
