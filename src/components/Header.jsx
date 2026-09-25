@@ -80,17 +80,26 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
   const renderMenuItem = (item, menu) => {
     if (menu === 'GRAYBOX') {
       return (
-        <div key={item} className="py-2 border-b last:border-b-0 border-gray-100">
+        <div
+          key={item}
+          className={`py-2 border-b last:border-b-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-100'}`}
+        >
           {/* Item name as a header */}
-          <div className="px-4 py-1 text-xs text-gray-500 bg-gray-50">
+          <div className={`px-4 py-1 text-xs ${isDarkMode ? 'bg-gray-900 text-gray-400' : 'bg-gray-50 text-gray-500'}`}>
             {item}
           </div>
           <div className="flex">
             {/* Screen Diff Link - Left Column */}
-            <div className="flex-1 hover:bg-gray-50 transition-colors duration-150 border-r border-gray-100">
+            <div
+              className={`flex-1 border-r transition-colors duration-150 ${
+                isDarkMode ? 'border-gray-700 hover:bg-gray-700/60' : 'border-gray-100 hover:bg-gray-50'
+              }`}
+            >
               <Link
                 to={`/imagediff/${item}`}
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary flex items-center gap-2 group"
+                className={`px-4 py-2 text-sm font-medium hover:text-primary flex items-center gap-2 group ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                }`}
                 onClick={(e) => {
                   e.stopPropagation();
                   setHoveredMenu(null);
@@ -105,10 +114,10 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
             </div>
 
             {/* JSON Viewer Link - Right Column */}
-            <div className="flex-1 hover:bg-gray-50 transition-colors duration-150">
+            <div className={`flex-1 transition-colors duration-150 ${isDarkMode ? 'hover:bg-gray-700/60' : 'hover:bg-gray-50'}`}>
               <button
                 onClick={(e) => handleJsonView(item, e)}
-                className="px-4 py-2 text-sm text-gray-700 flex items-center gap-2 group w-full"
+                className={`px-4 py-2 text-sm flex items-center gap-2 group w-full ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
               >
                 <svg className="w-4 h-4 text-gray-400 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
@@ -125,7 +134,9 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
       <Link
         key={item}
         to={`/imagediff/${item}`}
-        className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 group flex items-center gap-2"
+        className={`px-4 py-2 text-sm group flex items-center gap-2 transition-colors duration-150 ${
+          isDarkMode ? 'text-gray-200 hover:bg-gray-700/60' : 'text-gray-700 hover:bg-gray-50'
+        }`}
         onClick={(e) => {
           e.stopPropagation();
           setHoveredMenu(null);
@@ -227,20 +238,30 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
   );
 
   return (
-    <nav className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} px-4 py-2 sticky top-0 z-50 shadow-md`}>
+    <nav
+      className={`px-4 py-2.5 sticky top-0 z-50 border-b backdrop-blur supports-[backdrop-filter]:bg-opacity-90 ${
+        isDarkMode ? 'bg-gray-950/95 border-gray-800' : 'bg-white/95 border-gray-200'
+      }`}
+    >
       <div className="container mx-auto flex justify-between items-center">
-        <Link to="/" className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-black'}`}>
+        <Link
+          to="/"
+          className={`flex items-center gap-2 text-lg font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500 to-sky-500 text-sm text-white">
+            N
+          </span>
           Auto Tests Dashboard
         </Link>
-        
+
         <div className="hidden md:block flex-1 max-w-xl mx-4">
           {searchBar}
         </div>
 
         <div className="md:hidden">
-          <button 
+          <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className={`${isDarkMode ? 'text-white' : 'text-black'}`}
+            className={isDarkMode ? 'text-white' : 'text-gray-900'}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -248,46 +269,59 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
           </button>
         </div>
 
-        <div ref={menuRef} className={`md:flex ${isMenuOpen ? 'block' : 'hidden'} absolute md:relative top-16 md:top-0 left-0 right-0 md:right-auto ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} md:bg-transparent`}>
-          <ul className="md:flex space-y-2 md:space-y-0 md:space-x-4 p-4 md:p-0">
+        <div
+          ref={menuRef}
+          className={`md:flex ${isMenuOpen ? 'block' : 'hidden'} absolute md:relative top-16 md:top-0 left-0 right-0 md:right-auto border-b md:border-0 ${
+            isDarkMode ? 'bg-gray-950 border-gray-800' : 'bg-white border-gray-200'
+          } md:bg-transparent`}
+        >
+          <ul className="md:flex items-center space-y-1 md:space-y-0 md:space-x-1 p-3 md:p-0">
             {Object.keys(displayMenuData).map((menu) => (
               <li key={menu} className="relative group">
                 <button
-                  className={`
-                    ${isDarkMode ? 'text-white hover:text-gray-300' : 'text-gray-700 hover:text-gray-900'}
-                    px-4 py-2 rounded-md text-sm font-medium transition-all duration-200
-                    ${activeMenu === menu ? 'bg-primary text-white shadow-lg scale-105' : 'hover:bg-gray-100'}
-                    flex items-center gap-2
-                  `}
+                  className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-all duration-150 flex items-center gap-1.5 ${
+                    activeMenu === menu
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : isDarkMode
+                        ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
                   onClick={() => handleMenuClick(menu)}
                 >
                   <span>{menu}</span>
-                  <svg 
-                    className={`w-4 h-4 transition-transform duration-200 ${hoveredMenu === menu ? 'rotate-180' : ''}`} 
-                    fill="none" 
-                    stroke="currentColor" 
+                  <svg
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${hoveredMenu === menu ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
                     viewBox="0 0 24 24"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
-                
-                <div className={`
-                  ${hoveredMenu === menu ? 'block opacity-100 translate-y-0' : 'hidden opacity-0 -translate-y-2'} 
-                  absolute left-0 mt-2 w-56 rounded-lg shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50
-                  transform transition-all duration-200
-                `}>
+
+                <div
+                  className={`
+                  ${hoveredMenu === menu ? 'block opacity-100 translate-y-0' : 'hidden opacity-0 -translate-y-2'}
+                  absolute left-0 mt-2 w-56 rounded-lg shadow-lg ring-1 z-50 transform transition-all duration-200
+                  ${isDarkMode ? 'bg-gray-800 ring-gray-700' : 'bg-white ring-black ring-opacity-5'}
+                `}
+                >
                   <div className="py-1 rounded-lg overflow-hidden">
                     {displayMenuData[menu].map((item) => renderMenuItem(item, menu))}
                   </div>
                 </div>
               </li>
             ))}
-            <li>
-              <label className="flex cursor-pointer gap-2 items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
-                <input type="checkbox" value="dark" className="toggle theme-controller" onChange={handleThemeToggle} checked={isDarkMode}/>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            <li className="md:ml-2">
+              <label
+                className={`flex cursor-pointer gap-2 items-center rounded-full px-2.5 py-1.5 ${
+                  isDarkMode ? 'bg-gray-800 text-amber-300' : 'bg-gray-100 text-gray-500'
+                }`}
+                title="Toggle dark mode"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+                <input type="checkbox" value="dark" className="toggle toggle-sm theme-controller" onChange={handleThemeToggle} checked={isDarkMode}/>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
               </label>
             </li>
           </ul>

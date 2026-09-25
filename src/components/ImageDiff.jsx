@@ -866,7 +866,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
               {/* Sidebar toggle */}
               <button
                 onClick={() => setSidebarOpen((v) => !v)}
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 flex-shrink-0"
+                className={`w-6 h-6 flex items-center justify-center rounded flex-shrink-0 ${dark ? 'hover:bg-gray-700' : 'hover:bg-gray-200'}`}
                 aria-label="Toggle sidebar"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -877,7 +877,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
               <button
                 onClick={goPrev}
                 disabled={activeIdx === 0}
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 disabled:opacity-30 text-base leading-none"
+                className={`w-6 h-6 flex items-center justify-center rounded disabled:opacity-30 text-base leading-none ${dark ? 'hover:bg-gray-700' : 'hover:bg-gray-200'}`}
                 aria-label="Previous"
               >
                 ‹
@@ -888,7 +888,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
               <button
                 onClick={goNext}
                 disabled={activeIdx === filtered.length - 1}
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 disabled:opacity-30 text-base leading-none"
+                className={`w-6 h-6 flex items-center justify-center rounded disabled:opacity-30 text-base leading-none ${dark ? 'hover:bg-gray-700' : 'hover:bg-gray-200'}`}
                 aria-label="Next"
               >
                 ›
@@ -936,7 +936,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
 
               {/* View mode toggle */}
               <div
-                className={`flex rounded overflow-hidden border ml-1 flex-shrink-0 ${dark ? 'border-gray-600' : 'border-gray-300'}`}
+                className={`flex rounded-md overflow-hidden border ml-1 flex-shrink-0 ${dark ? 'border-gray-600' : 'border-gray-300'}`}
               >
                 {['split', 'slider', 'blink', 'diff'].map((mode) => (
                   <button
@@ -944,7 +944,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                     onClick={() => setViewMode(mode)}
                     className={`text-xs px-2 py-px transition-colors ${
                       viewMode === mode
-                        ? 'bg-blue-500 text-white'
+                        ? 'bg-indigo-600 text-white'
                         : dark
                           ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                           : 'bg-white text-gray-600 hover:bg-gray-50'
@@ -998,10 +998,10 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
               <button
                 onClick={runAiJudge}
                 disabled={aiJudging || !active}
-                className={`flex-shrink-0 text-xs px-2 py-px rounded border ml-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                className={`flex-shrink-0 text-xs px-2 py-px rounded-md border ml-1 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                   dark
-                    ? 'border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600'
-                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                    ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30'
+                    : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
                 }`}
                 title="Use AI to judge whether this diff is a real regression"
               >
