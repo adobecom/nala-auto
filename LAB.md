@@ -65,9 +65,23 @@ npm start
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/lab/config` | mode, repo/workflow, site list, shards, defaults |
-| POST | `/lab/runs` | `{ site, milolibs }` → `{ runId, mode, resultsUrl }` |
+| POST | `/lab/runs` | `{ site, milolibs }` → `{ runId, mode, site, resultsUrl }` |
+| POST | `/lab/runs` (quick) | `{ kind: 'quick', urls, viewports, milolibs }` → same; `400 { error }` on a bad list |
 | GET | `/lab/runs/:id` | current snapshot |
 | WS | `/lab/stream?runId=` | live `{ kind: 'update', ... }` snapshots |
+
+### Quick run
+
+**⚡ Quick run** (Run Console, or the button on Home) diffs up to 30 pasted URLs
+without creating a dataset. One line per page: a plain URL is compared against
+itself + the candidate query, `A | B` compares two different URLs; blank lines
+and `#` comments are ignored. Pick any subset of chrome / ipad / iphone.
+
+Each quick run is published as its own one-off dataset, `quick-<runId>`, so it
+never overwrites a real dataset's results and every run keeps a stable link
+(`/imagediff/quick-<runId>`). It dispatches the same screenshot workflow with
+`site=custom`, `custom_site=quick-<runId>` and the `urls` / `viewports` inputs,
+which the runner reads as `URLS` in place of the site's sheet.
 
 ## v2 — real iOS Simulator matrix (scaffolded)
 

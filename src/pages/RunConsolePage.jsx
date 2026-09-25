@@ -41,10 +41,13 @@ const DATA_URL =
 const RunConsolePage = () => {
   const [searchParams] = useSearchParams();
   const preselectedSite = searchParams.get('site');
+  const initialKind = ['screenshot', 'quick', 'ios'].includes(searchParams.get('mode')) ? searchParams.get('mode') : 'screenshot';
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeMenu, setActiveMenu] = useState('MILOCORE');
   const [config, setConfig] = useState(null);
-  const [kind, setKind] = useState('screenshot'); // 'screenshot' | 'ios'
+  const [kind, setKind] = useState(initialKind); // 'screenshot' | 'quick' | 'ios'
+  const [quickUrls, setQuickUrls] = useState('');
+  const [quickViewports, setQuickViewports] = useState(['chrome', 'ipad', 'iphone']);
   const [site, setSite] = useState(preselectedSite || 'bacom');
   const [milolibs, setMilolibs] = useState('?milolibs=stage');
   const [selDevices, setSelDevices] = useState(['iPhone 15']);
@@ -154,6 +157,22 @@ const RunConsolePage = () => {
   const toggleVersion = (v) =>
     setSelVersions((cur) => (cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]));
 
+  const toggleViewport = (v) =>
+    setQuickViewports((cur) => (cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]));
+
+  // Mirrors the backend's parseQuickUrls() so problems show while typing.
+  const QUICK_MAX = 30;
+  const quickLines = quickUrls.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+  const quickBad = quickLines.filter((l) => {
+    const parts = l.split('|').map((x) => x.trim());
+    return parts.length > 2 || !parts.filter(Boolean).every((u) => /^https?:\/\/\S+$/i.test(u));
+  });
+  const quickError = quickBad.length
+    ? `Not a valid URL line: ${quickBad[0]}${quickBad.length > 1 ? ` (+${quickBad.length - 1} more)` : ''}`
+    : quickLines.length > QUICK_MAX
+      ? `Quick run is capped at ${QUICK_MAX} URLs — add a dataset for bigger lists.`
+      : null;
+
   const toggleDevice = (d) =>
     setSelDevices((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d]));
 
@@ -176,8 +195,12 @@ const RunConsolePage = () => {
   const shards = Math.max(1, Math.floor(iosRunners / Math.max(1, combos)));
   const parallelJobs = combos * shards;
 
-  const sessions = kind === 'ios' ? combos : (config?.shards?.length || 3);
-  const canRun = !busy && (kind !== 'ios' || combos > 0);
+  const sessions = kind === 'ios' ? combos : kind === 'quick' ? quickViewports.length : (config?.shards?.length || 3);
+  const canRun = !busy && (kind === 'ios'
+    ? combos > 0
+    : kind === 'quick'
+      ? quickLines.length > 0 && !quickError && quickViewports.length > 0
+      : true);
 
   const start = async () => {
     setBusy(true);
@@ -189,13 +212,16 @@ const RunConsolePage = () => {
     const body =
       kind === 'ios'
         ? { kind, site, milolibs, iosVersions: selVersions, devices: selDevices }
-        : { kind, site, milolibs };
+        : kind === 'quick'
+          ? { kind, milolibs, urls: quickUrls, viewports: quickViewports }
+          : { kind, site, milolibs };
     try {
       const res = await fetch('/lab/runs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      if (res.status === 400) throw new Error((await res.json().catch(() => ({}))).error || 'invalid request');
       if (!res.ok) throw new Error(`backend returned ${res.status} — is the /lab server (server/) running on :4000?`);
       let data;
       try {
@@ -206,8 +232,9 @@ const RunConsolePage = () => {
       setRun({
         runId: data.runId,
         runKind: kind,
-        site,
+        site: data.site || site,
         milolibs,
+        viewports: kind === 'quick' ? quickViewports : undefined,
         devices: selDevices,
         mode: data.mode,
         status: 'dispatching',
@@ -312,12 +339,37 @@ const RunConsolePage = () => {
               <button className={segBtn(kind === 'screenshot')} onClick={() => setKind('screenshot')}>
                 Viewport diff
               </button>
+              <button className={segBtn(kind === 'quick')} onClick={() => setKind('quick')}>
+                ⚡ Quick run
+              </button>
               <button className={segBtn(kind === 'ios')} onClick={() => setKind('ios')}>
                 Real iOS · Simulator
               </button>
             </div>
 
+            {kind === 'quick' && (
+              <label className="block">
+                <span className={`mb-1 flex items-baseline justify-between text-sm font-medium ${subtle}`}>
+                  <span>URLs — one per line</span>
+                  <span className={quickLines.length > QUICK_MAX ? 'text-rose-500' : ''}>
+                    {quickLines.length}/{QUICK_MAX}
+                  </span>
+                </span>
+                <textarea
+                  className={`h-36 w-full rounded-lg border px-3 py-2 font-mono text-sm ${field}`}
+                  value={quickUrls}
+                  onChange={(e) => setQuickUrls(e.target.value)}
+                  spellCheck={false}
+                  placeholder={'https://business.adobe.com/products/genstudio.html\nhttps://main--da-bacom--adobecom.aem.live/x | https://stage--da-bacom--adobecom.aem.live/x'}
+                />
+                <span className={`mt-1 block text-xs ${quickError ? 'text-rose-500' : subtle}`}>
+                  {quickError || 'A plain URL is compared against itself + the candidate query below. Use "A | B" to compare two different URLs.'}
+                </span>
+              </label>
+            )}
+
             <div className="grid gap-4 md:grid-cols-2">
+              {kind !== 'quick' && (
               <label className="block">
                 <span className={`mb-1 block text-sm font-medium ${subtle}`}>Site</span>
                 <select
@@ -332,6 +384,7 @@ const RunConsolePage = () => {
                   ))}
                 </select>
               </label>
+              )}
               <label className="block">
                 <span className={`mb-1 block text-sm font-medium ${subtle}`}>Candidate (milo_libs query)</span>
                 <input
@@ -343,7 +396,20 @@ const RunConsolePage = () => {
               </label>
             </div>
 
-            {kind === 'screenshot' ? (
+            {kind === 'quick' ? (
+              <div>
+                <div className={`mb-2 text-sm font-medium ${subtle}`}>
+                  Viewports — pick any; each is a parallel job
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {['chrome', 'ipad', 'iphone'].map((v) => (
+                    <button key={v} className={chip(quickViewports.includes(v), false)} onClick={() => toggleViewport(v)}>
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : kind === 'screenshot' ? (
               <div>
                 <div className={`mb-2 text-sm font-medium ${subtle}`}>
                   Viewports — parallel shards on self-hosted macOS runners
@@ -451,7 +517,7 @@ const RunConsolePage = () => {
                   >
                     {renderPill(r.status, r.conclusion)}
                     <span className={`font-mono ${subtle}`}>#{r.runId}</span>
-                    <span className={text}>{r.runKind === 'ios' ? `iOS · ${(r.devices || [r.device]).filter(Boolean).join(', ')}` : 'Viewport'}</span>
+                    <span className={text}>{r.runKind === 'ios' ? `iOS · ${(r.devices || [r.device]).filter(Boolean).join(', ')}` : r.runKind === 'quick' ? `⚡ Quick · ${(r.urls || []).length} URL${(r.urls || []).length === 1 ? '' : 's'}` : 'Viewport'}</span>
                     <span className={`${subtle} truncate`}>{r.site}</span>
                     {r.startedAt && <span className={`text-xs ${subtle}`}>{pacificTime(r.startedAt)}</span>}
                     {!r.done && <span className="ml-auto text-xs font-semibold text-sky-500">● live</span>}
@@ -471,7 +537,7 @@ const RunConsolePage = () => {
                   <h2 className={`text-lg font-semibold ${text}`}>Run {run.runId ? `#${run.runId}` : ''}</h2>
                   {renderPill(run.status, run.conclusion)}
                   <span className={`text-sm ${subtle}`}>
-                    {run.runKind === 'ios' ? `iOS · ${(run.devices || [run.device].filter(Boolean)).join(', ')}` : 'Viewport'} · {run.site} · {run.milolibs}
+                    {run.runKind === 'ios' ? `iOS · ${(run.devices || [run.device].filter(Boolean)).join(', ')}` : run.runKind === 'quick' ? `⚡ Quick · ${(run.viewports || []).join(', ')}` : 'Viewport'} · {run.site} · {run.milolibs}
                   </span>
                 </div>
                 <div className="flex gap-2">

@@ -1,5 +1,7 @@
-// Run store + driver. Supports two run kinds:
+// Run store + driver. Supports three run kinds:
 //   - 'screenshot' → the existing screenshot-diff-nala-parallel.yml (chrome/ipad/iphone shards)
+//   - 'quick'      → same workflow on an ad-hoc URL list, published as its own
+//                    one-off dataset (quick-<runId>) so it never touches a real one
 //   - 'ios'        → run-nala-ios.yml (one job per selected iOS Simulator version)
 // LIVE mode dispatches the real workflow and polls its jobs; MOCK mode
 // simulates the same lifecycle so the UI is fully demoable with no token.
@@ -25,8 +27,27 @@ const STATE_FILE =
 const PLAIN_FIELDS = [
   'id', 'kind', 'site', 'milolibs', 'device', 'devices', 'iosVersions', 'maxUrls',
   'mode', 'startedAt', 'ghRunId', 'htmlUrl', 'status', 'conclusion', 'note', 'jobs',
-  'resultsUrl', 'done',
+  'resultsUrl', 'done', 'urls', 'viewports',
 ];
+
+export const VIEWPORTS = ['chrome', 'ipad', 'iphone'];
+export const QUICK_MAX_URLS = 30;
+
+// Validate a Quick Run URL list the same way the runner's parseUrlList() does
+// (one "url" or "urlA | urlB" per line, http(s) only) so a bad paste is
+// rejected here, instantly, instead of minutes later on a runner.
+export function parseQuickUrls(text) {
+  const lines = String(text || '').split(/\r?\n/).map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'));
+  const bad = lines.filter((l) => !l.split('|').map((s) => s.trim()).filter(Boolean)
+    .every((u) => /^https?:\/\/\S+$/i.test(u)) || l.split('|').length > 2);
+  if (!lines.length) throw new Error('Enter at least one URL.');
+  if (bad.length) throw new Error(`Not a valid URL line: ${bad.slice(0, 3).join(' ; ')}`);
+  if (lines.length > QUICK_MAX_URLS) {
+    throw new Error(`Quick run is capped at ${QUICK_MAX_URLS} URLs (got ${lines.length}) — add a dataset for bigger lists.`);
+  }
+  return lines;
+}
 
 function persist() {
   try {
@@ -66,6 +87,8 @@ function makeRun(f) {
         runKind: this.kind,
         site: this.site,
         milolibs: this.milolibs,
+        urls: this.urls,
+        viewports: this.viewports,
         device: this.device,
         devices: this.devices,
         iosVersions: this.iosVersions,
@@ -85,8 +108,12 @@ function makeRun(f) {
 }
 
 export function createRun(body = {}) {
-  const kind = body.kind === 'ios' ? 'ios' : 'screenshot';
-  const site = (body.site || 'bacom').trim();
+  const kind = ['ios', 'quick'].includes(body.kind) ? body.kind : 'screenshot';
+  // Throws on a bad list; index.js turns that into a 400.
+  const urls = kind === 'quick' ? parseQuickUrls(body.urls) : undefined;
+  const picked = Array.isArray(body.viewports) ? VIEWPORTS.filter((v) => body.viewports.includes(v)) : [];
+  if (kind === 'quick' && !picked.length) throw new Error('Pick at least one viewport.');
+  const viewports = kind === 'quick' ? picked : undefined;
   const milolibs = (body.milolibs ?? '?milolibs=stage').trim();
   const device = (body.device || 'iPhone 15').trim();
   const devices =
@@ -95,6 +122,7 @@ export function createRun(body = {}) {
     Array.isArray(body.iosVersions) && body.iosVersions.length ? body.iosVersions : ['18.3'];
   const maxUrls = Number(body.maxUrls || 0);
   const id = randomUUID().slice(0, 8);
+  const site = kind === 'quick' ? `quick-${id}` : (body.site || 'bacom').trim();
   const live = gh.isLive();
 
   const runnablePairs = devices.flatMap((d) => iosVersions.filter((v) => pairRunnable(d, v)).map((v) => ({ d, v })));
@@ -103,7 +131,7 @@ export function createRun(body = {}) {
     kind === 'ios'
       ? runnablePairs.flatMap(({ d, v }) =>
           Array.from({ length: shards }, (_, s) => mkJob(`${d} · iOS ${v} · shard ${s + 1}/${shards}`)))
-      : ['chrome', 'ipad', 'iphone'].map(mkJob);
+      : (viewports || VIEWPORTS).map(mkJob);
 
   const run = makeRun({
     id,
@@ -114,6 +142,8 @@ export function createRun(body = {}) {
     devices,
     iosVersions,
     maxUrls,
+    urls,
+    viewports,
     mode: live ? 'live' : 'mock',
     startedAt: Date.now(),
     ghRunId: null,
@@ -182,7 +212,7 @@ function finish(run, conclusion) {
   push(run);
 }
 
-function inputsFor(run) {
+export function inputsFor(run) {
   if (run.kind === 'ios') {
     return {
       site: run.site,
@@ -191,6 +221,15 @@ function inputsFor(run) {
       devices: run.devices.join(','),
       max_urls: String(run.maxUrls || 0),
       max_parallel: String(IOS_RUNNERS),
+    };
+  }
+  if (run.kind === 'quick') {
+    return {
+      site: 'custom',
+      custom_site: run.site,
+      milo_libs: run.milolibs,
+      urls: run.urls.join('\n'),
+      viewports: run.viewports.join(','),
     };
   }
   return { ...screenshotSiteInputs(run.site), milo_libs: run.milolibs };

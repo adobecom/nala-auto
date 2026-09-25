@@ -180,6 +180,13 @@ const HomePage = () => {
               ▶ Run Console
             </a>
             <a
+              href="/console?mode=quick"
+              className={`rounded-lg px-4 py-2.5 text-sm font-semibold ${isDarkMode ? 'bg-gray-800 text-indigo-300 hover:bg-gray-700' : 'bg-white text-indigo-700 ring-1 ring-indigo-200 hover:bg-indigo-50'}`}
+              title="Paste a few URLs and diff them without setting up a dataset"
+            >
+              ⚡ Quick run
+            </a>
+            <a
               href="/manual-ios"
               className={`rounded-lg px-4 py-2.5 text-sm font-semibold ${isDarkMode ? 'bg-gray-800 text-emerald-300 hover:bg-gray-700' : 'bg-white text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-50'}`}
             >

@@ -116,8 +116,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p === '/lab/runs' && req.method === 'POST') {
-      const run = createRun(await readBody(req));
-      return send(res, 200, { runId: run.id, mode: run.mode, resultsUrl: run.resultsUrl });
+      let run;
+      try {
+        run = createRun(await readBody(req));
+      } catch (e) {
+        return send(res, 400, { error: String(e.message || e) });
+      }
+      return send(res, 200, { runId: run.id, mode: run.mode, site: run.site, resultsUrl: run.resultsUrl });
     }
 
     if (p === '/lab/manual-ios/session' && req.method === 'POST') {
