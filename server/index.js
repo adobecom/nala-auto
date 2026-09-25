@@ -9,6 +9,7 @@ import { createRun, getRun, attachClient, listRuns } from './runner.js';
 import { getCustomSites, addCustomSite, removeCustomSite } from './customSites.js';
 import { BUILTIN_SITES } from './workflowSites.js';
 import { manualSessionConfig, createManualSession, endManualSession } from './manualSessions.js';
+import * as aiJudge from './aiJudge.js';
 
 const PORT = process.env.LAB_PORT || 4000;
 
@@ -63,7 +64,31 @@ const server = http.createServer(async (req, res) => {
         defaultMilolibs: '?milolibs=stage',
         nalaAutoBase: process.env.NALA_AUTO_BASE || 'http://nala-auto.corp.adobe.com',
         manualIos: manualSessionConfig(),
+        aiJudgeConfigured: aiJudge.isConfigured(),
       });
+    }
+
+    // "AI 判断" button on the imagediff page: send one snapshot's
+    // baseline/new/diff image paths, get back a vision-model verdict on
+    // whether the diff is a real regression or noise. See aiJudge.js for the
+    // pluggable provider config (env vars) and README.md for setup notes.
+    // Gracefully reports "not configured" (200, not an error) instead of
+    // failing when no AI_JUDGE_API_KEY is set, so the button always renders.
+    if (p === '/lab/judge' && req.method === 'POST') {
+      const { a, b, diff } = await readBody(req);
+      if (!a || !b) return send(res, 400, { error: 'missing a/b image paths' });
+      if (!aiJudge.isConfigured()) {
+        return send(res, 200, {
+          configured: false,
+          message: '未配置 AI 判断服务：请设置 AI_JUDGE_API_KEY（以及可选的 AI_JUDGE_PROVIDER / AI_JUDGE_BASE_URL / AI_JUDGE_MODEL）环境变量后重启后端。见 README.md。',
+        });
+      }
+      try {
+        const result = await aiJudge.judgeDiff({ a, b, diff });
+        return send(res, 200, { configured: true, ...result });
+      } catch (e) {
+        return send(res, 502, { configured: true, error: String(e.message || e) });
+      }
     }
 
     // Persisted, shared "add dataset" list — not per-browser localStorage.

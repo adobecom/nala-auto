@@ -503,6 +503,8 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
   const [flashHotspot, setFlashHotspot] = useState(null);
   const [diffDensity, setDiffDensity] = useState([]);
   const [viewportRatio, setViewportRatio] = useState({ top: 0, height: 1 });
+  const [aiJudgment, setAiJudgment] = useState(null);
+  const [aiJudging, setAiJudging] = useState(false);
   const sidebarRef = useRef(null);
   const leftPanelRef = useRef(null);
   const rightPanelRef = useRef(null);
@@ -585,6 +587,36 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
   }, [filtered.length]);
 
   const active = filtered[activeIdx] ?? null;
+
+  // Reset any previous "AI 判断" result when the user navigates to a
+  // different snapshot — a stale judgment for the old image pair would be
+  // misleading if left on screen.
+  useEffect(() => {
+    setAiJudgment(null);
+    setAiJudging(false);
+  }, [active?.id]);
+
+  // Calls the /lab/judge backend (server/aiJudge.js), which is a thin proxy
+  // to whichever vision-capable model an admin has configured (env vars —
+  // see README.md). Not configured → friendly message, not an error.
+  const runAiJudge = useCallback(async () => {
+    if (!active || aiJudging) return;
+    setAiJudging(true);
+    setAiJudgment(null);
+    try {
+      const res = await fetch('/lab/judge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ a: active.a, b: active.b, diff: active.diff }),
+      });
+      const json = await res.json();
+      setAiJudgment(json);
+    } catch (e) {
+      setAiJudgment({ error: String(e.message || e) });
+    } finally {
+      setAiJudging(false);
+    }
+  }, [active, aiJudging]);
 
   // Detect diff hotspots (bands of the page with actual pixel differences) so
   // the user can jump straight to them instead of scrolling a full-page image.
@@ -959,7 +991,61 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                   )}
                 </div>
               )}
+
+              {/* AI 判断 — sends baseline/new/diff images to whichever
+                  vision model the backend has configured (server/aiJudge.js)
+                  and asks it to call the diff a regression or noise. */}
+              <button
+                onClick={runAiJudge}
+                disabled={aiJudging || !active}
+                className={`flex-shrink-0 text-xs px-2 py-px rounded border ml-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  dark
+                    ? 'border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600'
+                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+                title="用 AI 判断这个 diff 是否为真实回归"
+              >
+                {aiJudging ? '🤖 判断中…' : '🤖 AI 判断'}
+              </button>
             </div>
+
+            {/* AI 判断结果面板 */}
+            {aiJudgment && (
+              <div
+                className={`flex items-start gap-2 px-3 py-1.5 text-xs border-b flex-shrink-0 ${
+                  dark ? 'border-gray-700 bg-gray-800 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-700'
+                }`}
+              >
+                {aiJudgment.configured === false ? (
+                  <span className="text-amber-500">⚠️ {aiJudgment.message}</span>
+                ) : aiJudgment.error ? (
+                  <span className="text-red-500">❌ AI 判断失败：{aiJudgment.error}</span>
+                ) : (
+                  <>
+                    <span
+                      className={`flex-shrink-0 px-1.5 py-px rounded-full font-medium whitespace-nowrap ${
+                        aiJudgment.verdict === 'regression'
+                          ? 'bg-red-100 text-red-700'
+                          : aiJudgment.verdict === 'noise'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-200 text-gray-600'
+                      }`}
+                    >
+                      {aiJudgment.verdict === 'regression' ? '🔴 疑似回归' : aiJudgment.verdict === 'noise' ? '🟢 噪音' : '⚪ 不确定'}
+                      {typeof aiJudgment.confidence === 'number' && ` ${Math.round(aiJudgment.confidence * 100)}%`}
+                    </span>
+                    <span className="min-w-0">{aiJudgment.reasoning}</span>
+                  </>
+                )}
+                <button
+                  onClick={() => setAiJudgment(null)}
+                  className={`ml-auto flex-shrink-0 ${dark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
+                  aria-label="Dismiss"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
             {/* Comparison area — overflow-y-auto on each column independently */}
             <div className="flex-1 overflow-hidden relative">
