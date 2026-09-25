@@ -70,23 +70,30 @@ const ZoomControls = ({ zoom, setZoom, getResetZoom, className = '' }) => (
 // object-fit: cover to match the taller one's height — causing baseline/new
 // content to drift out of vertical alignment whenever page heights differ,
 // which is common for real full-page screenshots).
-const NaturalCompareSlider = ({ leftImage, rightImage, leftLabel, rightLabel }) => {
+const NaturalCompareSlider = ({
+  leftImage, rightImage, leftLabel, rightLabel, zoom = 1, diffImage, showDiff, onToggleDiff,
+}) => {
   const containerRef = useRef(null);
   const leftImgRef = useRef(null);
   const rightImgRef = useRef(null);
   const draggingRef = useRef(false);
   const [pos, setPos] = useState(50);
   const [heights, setHeights] = useState({ left: 0, right: 0 });
+  const [renderWidth, setRenderWidth] = useState(0);
 
   const recompute = useCallback(() => {
-    const width = containerRef.current?.clientWidth || 0;
+    // Measure the scrollable wrapper (not this container itself, whose width
+    // changes with zoom) so zooming in/out keeps the base width stable.
+    const baseWidth = containerRef.current?.parentElement?.clientWidth || 0;
+    const width = Math.max(0, baseWidth * zoom);
     const l = leftImgRef.current;
     const r = rightImgRef.current;
+    setRenderWidth(width);
     setHeights({
       left: l?.naturalWidth ? (l.naturalHeight / l.naturalWidth) * width : 0,
       right: r?.naturalWidth ? (r.naturalHeight / r.naturalWidth) * width : 0,
     });
-  }, []);
+  }, [zoom]);
 
   useEffect(() => {
     recompute();
@@ -111,12 +118,19 @@ const NaturalCompareSlider = ({ leftImage, rightImage, leftLabel, rightLabel }) 
   }, []);
 
   const height = Math.max(heights.left, heights.right);
+  // Flag when baseline/new have meaningfully different natural heights — a
+  // fixed-width scale factor means content beyond the shorter image's end is
+  // just blank, not a real content difference, so this needs to be obvious.
+  const mismatchPx = Math.round(Math.abs(heights.left - heights.right));
+  const showMismatch = heights.left > 0 && heights.right > 0 && mismatchPx > 4;
+  const mismatchY = Math.min(heights.left, heights.right);
+  const shorterLabel = heights.left < heights.right ? leftLabel : rightLabel;
 
   return (
     <div
       ref={containerRef}
-      className="relative select-none mx-auto"
-      style={{ height: height || undefined, maxWidth: '100%' }}
+      className="relative select-none"
+      style={{ height: height || undefined, width: renderWidth || undefined }}
     >
       <img
         ref={leftImgRef}
@@ -134,14 +148,44 @@ const NaturalCompareSlider = ({ leftImage, rightImage, leftLabel, rightLabel }) 
         className="absolute top-0 left-0 w-full block"
         style={{ clipPath: `inset(0 0 0 ${pos}%)` }}
       />
-      <div className="absolute top-2 left-2 text-xs bg-black/50 text-white px-2 py-1 rounded pointer-events-none">
+      {showDiff && diffImage && (
+        <img
+          src={diffImage}
+          alt="diff"
+          className="absolute top-0 left-0 w-full block pointer-events-none"
+          style={{ filter: 'invert(1) hue-rotate(180deg) saturate(8)', mixBlendMode: 'screen', zIndex: 5 }}
+        />
+      )}
+      {showMismatch && (
+        <>
+          <div
+            className="absolute left-0 right-0 border-t-2 border-dashed border-yellow-400 pointer-events-none z-20"
+            style={{ top: mismatchY }}
+          />
+          <div
+            className="absolute text-xs bg-yellow-500 text-black px-2 py-0.5 rounded pointer-events-none z-20 font-medium whitespace-nowrap"
+            style={{ top: mismatchY + 4, left: '50%', transform: 'translateX(-50%)' }}
+          >
+            ⚠ {shorterLabel} ends here — heights differ by {mismatchPx}px (blank below)
+          </div>
+        </>
+      )}
+      <div className="absolute top-2 left-2 text-xs bg-black/50 text-white px-2 py-1 rounded pointer-events-none z-20">
         {leftLabel}
       </div>
-      <div className="absolute top-2 right-2 text-xs bg-black/50 text-white px-2 py-1 rounded pointer-events-none">
+      <div className="absolute top-2 right-2 text-xs bg-black/50 text-white px-2 py-1 rounded pointer-events-none z-20">
         {rightLabel}
       </div>
+      {diffImage && (
+        <button
+          onClick={onToggleDiff}
+          className="absolute top-2 left-1/2 -translate-x-1/2 text-xs bg-black/50 text-white px-2 py-1 rounded z-30 hover:bg-black/70"
+        >
+          {showDiff ? 'Hide diff overlay' : 'Show diff overlay'}
+        </button>
+      )}
       <div
-        className="absolute top-0 bottom-0 flex items-center justify-center cursor-ew-resize z-10"
+        className="absolute top-0 bottom-0 flex items-center justify-center cursor-ew-resize z-20"
         style={{ left: `${pos}%`, transform: 'translateX(-50%)', width: 32 }}
         onPointerDown={(e) => { draggingRef.current = true; updatePosFromClientX(e.clientX); e.preventDefault(); }}
       >
@@ -193,6 +237,8 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
   const [diffRaw, setDiffRaw] = useState(false);
   const [diffZoom, setDiffZoom] = useState(defaultZoom);
   const [splitZoom, setSplitZoom] = useState(1);
+  const [sliderZoom, setSliderZoom] = useState(1);
+  const [sliderDiffOn, setSliderDiffOn] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const sidebarRef = useRef(null);
   const leftPanelRef = useRef(null);
@@ -237,6 +283,8 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
     setDiffRaw(false);
     setDiffZoom(defaultZoom());
     setSplitZoom(1);
+    setSliderZoom(1);
+    setSliderDiffOn(false);
 
     if (leftPanelRef.current) leftPanelRef.current.scrollTop = 0;
     if (rightPanelRef.current) rightPanelRef.current.scrollTop = 0;
@@ -577,18 +625,32 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
               )}
 
               {viewMode === 'slider' && (
-                <div className="p-4 h-full overflow-auto">
-                  {imgUrl(active.a) && imgUrl(active.b) ? (
-                    <NaturalCompareSlider
-                      leftImage={imgUrl(active.a)}
-                      rightImage={imgUrl(active.b)}
-                      leftLabel="Baseline"
-                      rightLabel="New"
+                <div className="h-full relative">
+                  <div className="p-4 h-full overflow-auto">
+                    {imgUrl(active.a) && imgUrl(active.b) ? (
+                      <NaturalCompareSlider
+                        leftImage={imgUrl(active.a)}
+                        rightImage={imgUrl(active.b)}
+                        leftLabel="Baseline"
+                        rightLabel="New"
+                        zoom={sliderZoom}
+                        diffImage={active.diff ? imgUrl(active.diff) : null}
+                        showDiff={sliderDiffOn}
+                        onToggleDiff={() => setSliderDiffOn((v) => !v)}
+                      />
+                    ) : (
+                      <div className="text-gray-400 text-center mt-8">
+                        Both images required for slider view
+                      </div>
+                    )}
+                  </div>
+                  {imgUrl(active.a) && imgUrl(active.b) && (
+                    <ZoomControls
+                      zoom={sliderZoom}
+                      setZoom={setSliderZoom}
+                      getResetZoom={() => 1}
+                      className="absolute bottom-3 right-3 z-20"
                     />
-                  ) : (
-                    <div className="text-gray-400 text-center mt-8">
-                      Both images required for slider view
-                    </div>
                   )}
                 </div>
               )}
