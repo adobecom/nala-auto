@@ -357,6 +357,102 @@ const NaturalCompareSlider = ({
   );
 };
 
+// "Blink" (a.k.a. onion-skin / flicker) comparison: same position, same
+// scale, alternating baseline <-> new at a fixed interval. The eye is far
+// more sensitive to something *changing in place* than to spot-the-
+// difference across two side-by-side or slider-clipped images, so this
+// surfaces subtle shifts (a few px of movement, a slightly different font
+// weight, a recolored icon) that split/slider view can visually mask.
+const BlinkCompare = ({ leftImage, rightImage, leftLabel, rightLabel, zoom = 1 }) => {
+  const containerRef = useRef(null);
+  const leftImgRef = useRef(null);
+  const rightImgRef = useRef(null);
+  const [showRight, setShowRight] = useState(false);
+  const [playing, setPlaying] = useState(true);
+  const [intervalMs, setIntervalMs] = useState(500);
+  const [renderWidth, setRenderWidth] = useState(0);
+  const [height, setHeight] = useState(0);
+
+  const recompute = useCallback(() => {
+    const baseWidth = containerRef.current?.parentElement?.clientWidth || 0;
+    const width = Math.max(0, baseWidth * zoom);
+    const l = leftImgRef.current;
+    const r = rightImgRef.current;
+    setRenderWidth(width);
+    // Use whichever image is taller so neither ever gets clipped — unlike
+    // the slider, both images are fully shown here (just not at the same
+    // time), so there's no "shorter image ends here" ambiguity to warn about.
+    const lh = l?.naturalWidth ? (l.naturalHeight / l.naturalWidth) * width : 0;
+    const rh = r?.naturalWidth ? (r.naturalHeight / r.naturalWidth) * width : 0;
+    setHeight(Math.max(lh, rh));
+  }, [zoom]);
+
+  useEffect(() => {
+    recompute();
+    window.addEventListener('resize', recompute);
+    return () => window.removeEventListener('resize', recompute);
+  }, [recompute, leftImage, rightImage]);
+
+  useEffect(() => {
+    if (!playing) return undefined;
+    const id = window.setInterval(() => setShowRight((v) => !v), intervalMs);
+    return () => window.clearInterval(id);
+  }, [playing, intervalMs]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative select-none"
+      style={{ height: height || undefined, width: renderWidth || undefined }}
+    >
+      <img
+        ref={leftImgRef}
+        src={leftImage}
+        alt={leftLabel}
+        onLoad={recompute}
+        className="absolute top-0 left-0 w-full block"
+        style={{ opacity: showRight ? 0 : 1 }}
+      />
+      <img
+        ref={rightImgRef}
+        src={rightImage}
+        alt={rightLabel}
+        onLoad={recompute}
+        className="absolute top-0 left-0 w-full block"
+        style={{ opacity: showRight ? 1 : 0 }}
+      />
+      <div className="absolute top-2 left-2 text-xs bg-black/50 text-white px-2 py-1 rounded pointer-events-none z-20">
+        {showRight ? rightLabel : leftLabel}
+      </div>
+      <div className="absolute top-2 right-2 flex items-center gap-1 z-20">
+        <button
+          onClick={() => setPlaying((v) => !v)}
+          className="text-xs bg-black/50 text-white px-2 py-1 rounded hover:bg-black/70"
+        >
+          {playing ? '⏸ pause' : '▶ play'}
+        </button>
+        <button
+          onClick={() => { setPlaying(false); setShowRight((v) => !v); }}
+          className="text-xs bg-black/50 text-white px-2 py-1 rounded hover:bg-black/70"
+          title="Manually toggle baseline/new"
+        >
+          ⇄ toggle
+        </button>
+        <select
+          value={intervalMs}
+          onChange={(e) => setIntervalMs(Number(e.target.value))}
+          className="text-xs bg-black/50 text-white px-1 py-1 rounded"
+          title="Blink speed"
+        >
+          <option value={200}>fast</option>
+          <option value={500}>medium</option>
+          <option value={1000}>slow</option>
+        </select>
+      </div>
+    </div>
+  );
+};
+
 const deviceLabel = (b) => {
   if (b === 'ipad') return 'Tablet Chrome';
   if (b === 'iphone') return 'Mobile Chrome';
@@ -398,6 +494,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
   const [splitZoom, setSplitZoom] = useState(1);
   const [sliderZoom, setSliderZoom] = useState(1);
   const [sliderDiffOn, setSliderDiffOn] = useState(false);
+  const [blinkZoom, setBlinkZoom] = useState(1);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [hotspots, setHotspots] = useState([]);
   const [hotspotIdx, setHotspotIdx] = useState(0);
@@ -411,6 +508,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
   const rightPanelRef = useRef(null);
   const sliderScrollRef = useRef(null);
   const diffScrollRef = useRef(null);
+  const blinkScrollRef = useRef(null);
   const scrollingRef = useRef(null); // tracks which panel initiated scroll to avoid loops
   const hotspotCacheRef = useRef(new Map());
 
@@ -454,6 +552,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
     setSplitZoom(1);
     setSliderZoom(1);
     setSliderDiffOn(false);
+    setBlinkZoom(1);
 
     if (leftPanelRef.current) leftPanelRef.current.scrollTop = 0;
     if (rightPanelRef.current) rightPanelRef.current.scrollTop = 0;
@@ -546,12 +645,13 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
 
     if (viewMode === 'slider') return doScroll(sliderScrollRef.current, sliderZoom);
     if (viewMode === 'diff') return doScroll(diffScrollRef.current, diffZoom);
+    if (viewMode === 'blink') return doScroll(blinkScrollRef.current, blinkZoom);
     if (viewMode === 'split') {
       doScroll(leftPanelRef.current, splitZoom);
       doScroll(rightPanelRef.current, splitZoom);
     }
     return null;
-  }, [viewMode, diffNaturalSize, sliderZoom, diffZoom, splitZoom]);
+  }, [viewMode, diffNaturalSize, sliderZoom, diffZoom, blinkZoom, splitZoom]);
 
   const flashTimeoutRef = useRef(null);
   const jumpToHotspot = useCallback((idx) => {
@@ -570,6 +670,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
   const activeScrollEl = useCallback(() => {
     if (viewMode === 'slider') return sliderScrollRef.current;
     if (viewMode === 'diff') return diffScrollRef.current;
+    if (viewMode === 'blink') return blinkScrollRef.current;
     return rightPanelRef.current;
   }, [viewMode]);
 
@@ -591,7 +692,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
       el.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
     };
-  }, [activeScrollEl, activeIdx, splitZoom, sliderZoom, diffZoom]);
+  }, [activeScrollEl, activeIdx, splitZoom, sliderZoom, diffZoom, blinkZoom]);
 
   // Minimap click/drag-to-jump: unlike jumpToHotspot (which targets a known
   // natural-pixel band), this seeks by scroll-ratio, so it works anywhere on
@@ -805,7 +906,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
               <div
                 className={`flex rounded overflow-hidden border ml-1 flex-shrink-0 ${dark ? 'border-gray-600' : 'border-gray-300'}`}
               >
-                {['split', 'slider', 'diff'].map((mode) => (
+                {['split', 'slider', 'blink', 'diff'].map((mode) => (
                   <button
                     key={mode}
                     onClick={() => setViewMode(mode)}
@@ -978,6 +1079,34 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                     <ZoomControls
                       zoom={sliderZoom}
                       setZoom={setSliderZoom}
+                      getResetZoom={() => 1}
+                      className="absolute bottom-3 right-6 z-20"
+                    />
+                  )}
+                </div>
+              )}
+
+              {viewMode === 'blink' && (
+                <div className="h-full relative">
+                  <div ref={blinkScrollRef} className="p-4 h-full overflow-auto">
+                    {imgUrl(active.a) && imgUrl(active.b) ? (
+                      <BlinkCompare
+                        leftImage={imgUrl(active.a)}
+                        rightImage={imgUrl(active.b)}
+                        leftLabel="Baseline"
+                        rightLabel="New"
+                        zoom={blinkZoom}
+                      />
+                    ) : (
+                      <div className="text-gray-400 text-center mt-8">
+                        Both images required for blink view
+                      </div>
+                    )}
+                  </div>
+                  {imgUrl(active.a) && imgUrl(active.b) && (
+                    <ZoomControls
+                      zoom={blinkZoom}
+                      setZoom={setBlinkZoom}
                       getResetZoom={() => 1}
                       className="absolute bottom-3 right-6 z-20"
                     />
