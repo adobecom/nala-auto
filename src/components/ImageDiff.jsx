@@ -19,6 +19,91 @@ const imgUrl = (p) => {
   return `${HOST}/${encoded}`;
 };
 
+// Same file, but via the same-origin /api proxy (already used for results.json)
+// instead of the absolute S3 host. S3 sends no Access-Control-Allow-Origin
+// header, so a canvas fed from the absolute URL is "tainted" and getImageData
+// throws — routing through /api keeps the request same-origin so we can read
+// pixels client-side for diff-hotspot detection below.
+const apiImgUrl = (p) => {
+  if (!p) return null;
+  const encoded = p.split('/').map(encodeURIComponent).join('/');
+  return `/api/milo/${encoded}`;
+};
+
+// Scan a diff.png (produced by Playwright's pixelmatch: unchanged pixels are
+// grayscale, changed pixels are reddish) for vertical bands that contain
+// differences, so users can jump straight to them instead of scrolling
+// through a 5000-7400px full-page screenshot looking for red pixels.
+const analyzeDiffHotspots = async (url) => {
+  const res = await fetch(url);
+  if (!res.ok) return { naturalWidth: 0, naturalHeight: 0, hotspots: [] };
+  const blob = await res.blob();
+  const bitmap = await createImageBitmap(blob);
+  const { width: naturalWidth, height: naturalHeight } = bitmap;
+
+  // Downscale before scanning — a 1920x7400 image is ~14M pixels, far more
+  // than we need to know *which rows* contain diff pixels.
+  const ANALYZE_WIDTH = 240;
+  const scale = Math.min(1, ANALYZE_WIDTH / naturalWidth);
+  const w = Math.max(1, Math.round(naturalWidth * scale));
+  const h = Math.max(1, Math.round(naturalHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  const { data } = ctx.getImageData(0, 0, w, h);
+
+  const rowDiffCount = new Array(h).fill(0);
+  for (let y = 0; y < h; y++) {
+    let count = 0;
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      // pixelmatch's default diff color is opaque red; unchanged pixels stay
+      // grayscale (r === g === b), so "reddish" reliably flags a diff pixel.
+      if (r > g + 30 && r > b + 30) count += 1;
+    }
+    rowDiffCount[y] = count;
+  }
+
+  // Cluster contiguous (with small gap tolerance) diff rows into bands.
+  const GAP_TOLERANCE = 2;
+  const MIN_BAND_ROWS = 2;
+  const clusters = [];
+  let start = -1;
+  let gap = 0;
+  let bandPixels = 0;
+  for (let y = 0; y < h; y++) {
+    if (rowDiffCount[y] > 0) {
+      if (start === -1) { start = y; bandPixels = 0; }
+      bandPixels += rowDiffCount[y];
+      gap = 0;
+    } else if (start !== -1) {
+      gap += 1;
+      if (gap > GAP_TOLERANCE) {
+        clusters.push({ start, end: y - gap, bandPixels });
+        start = -1;
+      }
+    }
+  }
+  if (start !== -1) clusters.push({ start, end: h - 1, bandPixels });
+
+  const hotspots = clusters
+    .filter((c) => c.end - c.start + 1 >= MIN_BAND_ROWS)
+    .map((c) => ({
+      y0: Math.round(c.start / scale),
+      y1: Math.round((c.end + 1) / scale),
+      score: c.bandPixels,
+    }))
+    .sort((a, b) => a.y0 - b.y0)
+    .slice(0, 40);
+
+  return { naturalWidth, naturalHeight, hotspots };
+};
+
 const Thumb = ({ src }) => {
   const [errored, setErrored] = useState(false);
   if (!src || errored) return <div className="w-full h-full bg-gray-300" />;
@@ -71,7 +156,7 @@ const ZoomControls = ({ zoom, setZoom, getResetZoom, className = '' }) => (
 // content to drift out of vertical alignment whenever page heights differ,
 // which is common for real full-page screenshots).
 const NaturalCompareSlider = ({
-  leftImage, rightImage, leftLabel, rightLabel, zoom = 1, diffImage, showDiff, onToggleDiff,
+  leftImage, rightImage, leftLabel, rightLabel, zoom = 1, diffImage, showDiff, onToggleDiff, flashBand,
 }) => {
   const containerRef = useRef(null);
   const leftImgRef = useRef(null);
@@ -170,6 +255,12 @@ const NaturalCompareSlider = ({
           </div>
         </>
       )}
+      {flashBand && (
+        <div
+          className="absolute left-0 right-0 border-2 border-yellow-400 bg-yellow-300/30 pointer-events-none z-10 animate-pulse"
+          style={{ top: flashBand.top, height: flashBand.height }}
+        />
+      )}
       <div className="absolute top-2 left-2 text-xs bg-black/50 text-white px-2 py-1 rounded pointer-events-none z-20">
         {leftLabel}
       </div>
@@ -240,10 +331,18 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
   const [sliderZoom, setSliderZoom] = useState(1);
   const [sliderDiffOn, setSliderDiffOn] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
+  const [hotspots, setHotspots] = useState([]);
+  const [hotspotIdx, setHotspotIdx] = useState(0);
+  const [hotspotsLoading, setHotspotsLoading] = useState(false);
+  const [diffNaturalSize, setDiffNaturalSize] = useState({ width: 0, height: 0 });
+  const [flashHotspot, setFlashHotspot] = useState(null);
   const sidebarRef = useRef(null);
   const leftPanelRef = useRef(null);
   const rightPanelRef = useRef(null);
+  const sliderScrollRef = useRef(null);
+  const diffScrollRef = useRef(null);
   const scrollingRef = useRef(null); // tracks which panel initiated scroll to avoid loops
+  const hotspotCacheRef = useRef(new Map());
 
   const syncScroll = useCallback((source, target) => (e) => {
     if (scrollingRef.current && scrollingRef.current !== source) return;
@@ -317,6 +416,80 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
   }, [filtered.length]);
 
   const active = filtered[activeIdx] ?? null;
+
+  // Detect diff hotspots (bands of the page with actual pixel differences) so
+  // the user can jump straight to them instead of scrolling a full-page image.
+  useEffect(() => {
+    setHotspots([]);
+    setHotspotIdx(0);
+    setDiffNaturalSize({ width: 0, height: 0 });
+    setFlashHotspot(null);
+    if (!active?.diff) return undefined;
+
+    const cached = hotspotCacheRef.current.get(active.diff);
+    if (cached) {
+      setHotspots(cached.hotspots);
+      setDiffNaturalSize({ width: cached.naturalWidth, height: cached.naturalHeight });
+      return undefined;
+    }
+
+    let cancelled = false;
+    setHotspotsLoading(true);
+    analyzeDiffHotspots(apiImgUrl(active.diff))
+      .then((result) => {
+        if (cancelled) return;
+        hotspotCacheRef.current.set(active.diff, result);
+        setHotspots(result.hotspots);
+        setDiffNaturalSize({ width: result.naturalWidth, height: result.naturalHeight });
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setHotspotsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [active?.diff]);
+
+  // Scroll whichever view is active to a given natural-pixel Y range in
+  // diff.png (all three views share the same top-left-aligned coordinate
+  // space, since Playwright pads the smaller image rather than cropping).
+  // Returns the on-screen pixel {top, height} of the band *for the slider
+  // view only* (its image container has no padding, so the math is exact —
+  // split/diff views wrap their image in padded containers, so a precise
+  // highlight box there isn't worth the added complexity; the scroll itself
+  // is still accurate up to a few px of padding).
+  const scrollActiveViewToY = useCallback((y0, y1) => {
+    const { width: naturalWidth } = diffNaturalSize;
+    if (!naturalWidth) return null;
+
+    const doScroll = (el, zoom) => {
+      if (!el) return null;
+      const scale = (el.clientWidth * zoom) / naturalWidth;
+      const top = y0 * scale;
+      const bottom = y1 * scale;
+      const target = top - el.clientHeight / 3;
+      el.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+      return { top, height: Math.max(4, bottom - top) };
+    };
+
+    if (viewMode === 'slider') return doScroll(sliderScrollRef.current, sliderZoom);
+    if (viewMode === 'diff') return doScroll(diffScrollRef.current, diffZoom);
+    if (viewMode === 'split') {
+      doScroll(leftPanelRef.current, splitZoom);
+      doScroll(rightPanelRef.current, splitZoom);
+    }
+    return null;
+  }, [viewMode, diffNaturalSize, sliderZoom, diffZoom, splitZoom]);
+
+  const flashTimeoutRef = useRef(null);
+  const jumpToHotspot = useCallback((idx) => {
+    const spot = hotspots[idx];
+    if (!spot) return;
+    setHotspotIdx(idx);
+    const rect = scrollActiveViewToY(spot.y0, spot.y1);
+    setFlashHotspot(viewMode === 'slider' && rect ? rect : null);
+    window.clearTimeout(flashTimeoutRef.current);
+    flashTimeoutRef.current = window.setTimeout(() => setFlashHotspot(null), 1200);
+  }, [hotspots, scrollActiveViewToY, viewMode]);
 
   const goPrev = () => setActiveIdx((i) => Math.max(i - 1, 0));
   const goNext = () => setActiveIdx((i) => Math.min(i + 1, filtered.length - 1));
@@ -529,6 +702,43 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                   </button>
                 ))}
               </div>
+
+              {/* Diff hotspot navigator — jump straight to detected diff bands
+                  instead of scrolling a full-page screenshot looking for them */}
+              {active.diff && (hotspotsLoading || hotspots.length > 0) && (
+                <div
+                  className={`flex items-center gap-1 rounded border ml-1 px-1.5 py-px flex-shrink-0 ${
+                    dark ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-white'
+                  }`}
+                  title="Detected diff hotspots"
+                >
+                  {hotspotsLoading ? (
+                    <span className="text-xs text-gray-400">scanning…</span>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => jumpToHotspot((hotspotIdx - 1 + hotspots.length) % hotspots.length)}
+                        className={`text-xs px-1 ${dark ? 'text-gray-300 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
+                        title="Previous hotspot"
+                        aria-label="Previous hotspot"
+                      >
+                        ‹
+                      </button>
+                      <span className="text-xs whitespace-nowrap select-none">
+                        🔥 {hotspotIdx + 1}/{hotspots.length}
+                      </span>
+                      <button
+                        onClick={() => jumpToHotspot((hotspotIdx + 1) % hotspots.length)}
+                        className={`text-xs px-1 ${dark ? 'text-gray-300 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
+                        title="Next hotspot"
+                        aria-label="Next hotspot"
+                      >
+                        ›
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Comparison area — overflow-y-auto on each column independently */}
@@ -626,7 +836,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
 
               {viewMode === 'slider' && (
                 <div className="h-full relative">
-                  <div className="p-4 h-full overflow-auto">
+                  <div ref={sliderScrollRef} className="p-4 h-full overflow-auto">
                     {imgUrl(active.a) && imgUrl(active.b) ? (
                       <NaturalCompareSlider
                         leftImage={imgUrl(active.a)}
@@ -637,6 +847,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                         diffImage={active.diff ? imgUrl(active.diff) : null}
                         showDiff={sliderDiffOn}
                         onToggleDiff={() => setSliderDiffOn((v) => !v)}
+                        flashBand={flashHotspot}
                       />
                     ) : (
                       <div className="text-gray-400 text-center mt-8">
@@ -657,6 +868,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
 
               {viewMode === 'diff' && (
                 <div
+                  ref={diffScrollRef}
                   className="relative overflow-auto h-full"
                   style={{ background: diffRaw ? 'transparent' : '#1a1a1a', isolation: 'isolate' }}
                 >
