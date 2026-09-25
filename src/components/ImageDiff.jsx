@@ -36,7 +36,7 @@ const apiImgUrl = (p) => {
 // through a 5000-7400px full-page screenshot looking for red pixels.
 const analyzeDiffHotspots = async (url) => {
   const res = await fetch(url);
-  if (!res.ok) return { naturalWidth: 0, naturalHeight: 0, hotspots: [] };
+  if (!res.ok) return { naturalWidth: 0, naturalHeight: 0, hotspots: [], density: [] };
   const blob = await res.blob();
   const bitmap = await createImageBitmap(blob);
   const { width: naturalWidth, height: naturalHeight } = bitmap;
@@ -101,7 +101,12 @@ const analyzeDiffHotspots = async (url) => {
     .sort((a, b) => a.y0 - b.y0)
     .slice(0, 40);
 
-  return { naturalWidth, naturalHeight, hotspots };
+  // Per-row diff density (0..1, fraction of the scanned width that differed)
+  // for the minimap strip — a full-height "where are the changes" overview,
+  // distinct from the hotspot list above which only surfaces discrete bands.
+  const density = rowDiffCount.map((count) => count / w);
+
+  return { naturalWidth, naturalHeight, hotspots, density };
 };
 
 const Thumb = ({ src }) => {
@@ -149,6 +154,69 @@ const ZoomControls = ({ zoom, setZoom, getResetZoom, className = '' }) => (
     >reset</button>
   </div>
 );
+
+// Full-page "code-editor style" density strip: renders one pixel per scanned
+// row of diff.png (grayscale -> red as diff density rises) so users can see
+// at a glance *where* changes cluster across a 5000-7000px screenshot, plus
+// a draggable viewport indicator to jump anywhere in one click — a broader,
+// continuous complement to the discrete hotspot prev/next navigator above.
+const Minimap = ({ dark, density, viewportTop, viewportHeight, onSeek }) => {
+  const canvasRef = useRef(null);
+  const trackRef = useRef(null);
+  const draggingRef = useRef(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !density.length) return;
+    canvas.width = 1;
+    canvas.height = density.length;
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.createImageData(1, density.length);
+    const base = dark ? 60 : 220;
+    for (let y = 0; y < density.length; y++) {
+      const t = Math.min(1, density[y]);
+      imgData.data[y * 4] = Math.round(base + t * (255 - base));
+      imgData.data[y * 4 + 1] = Math.round(base * (1 - t * 0.9));
+      imgData.data[y * 4 + 2] = Math.round(base * (1 - t * 0.9));
+      imgData.data[y * 4 + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }, [density, dark]);
+
+  const seekFromClientY = useCallback((clientY) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect || !rect.height) return;
+    onSeek((clientY - rect.top) / rect.height);
+  }, [onSeek]);
+
+  useEffect(() => {
+    const onMove = (e) => draggingRef.current && seekFromClientY(e.clientY);
+    const onUp = () => { draggingRef.current = false; };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [seekFromClientY]);
+
+  return (
+    <div
+      ref={trackRef}
+      className={`absolute top-0 right-0 bottom-0 w-4 z-20 cursor-ns-resize select-none border-l ${
+        dark ? 'border-gray-700 bg-gray-900/70' : 'border-gray-300 bg-white/80'
+      }`}
+      title="Diff density map — click or drag to jump"
+      onPointerDown={(e) => { draggingRef.current = true; seekFromClientY(e.clientY); }}
+    >
+      <canvas ref={canvasRef} className="w-full h-full block" />
+      <div
+        className="absolute left-0 right-0 bg-blue-400/30 border-y-2 border-blue-400 pointer-events-none"
+        style={{ top: `${viewportTop * 100}%`, height: `${Math.max(1, viewportHeight * 100)}%` }}
+      />
+    </div>
+  );
+};
 
 // Slider comparison that keeps both images at their own natural aspect ratio
 // (unlike react-compare-image, which stretches the shorter image with
@@ -336,6 +404,8 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
   const [hotspotsLoading, setHotspotsLoading] = useState(false);
   const [diffNaturalSize, setDiffNaturalSize] = useState({ width: 0, height: 0 });
   const [flashHotspot, setFlashHotspot] = useState(null);
+  const [diffDensity, setDiffDensity] = useState([]);
+  const [viewportRatio, setViewportRatio] = useState({ top: 0, height: 1 });
   const sidebarRef = useRef(null);
   const leftPanelRef = useRef(null);
   const rightPanelRef = useRef(null);
@@ -424,12 +494,14 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
     setHotspotIdx(0);
     setDiffNaturalSize({ width: 0, height: 0 });
     setFlashHotspot(null);
+    setDiffDensity([]);
     if (!active?.diff) return undefined;
 
     const cached = hotspotCacheRef.current.get(active.diff);
     if (cached) {
       setHotspots(cached.hotspots);
       setDiffNaturalSize({ width: cached.naturalWidth, height: cached.naturalHeight });
+      setDiffDensity(cached.density);
       return undefined;
     }
 
@@ -441,6 +513,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
         hotspotCacheRef.current.set(active.diff, result);
         setHotspots(result.hotspots);
         setDiffNaturalSize({ width: result.naturalWidth, height: result.naturalHeight });
+        setDiffDensity(result.density);
       })
       .catch(() => {})
       .finally(() => {
@@ -490,6 +563,52 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
     window.clearTimeout(flashTimeoutRef.current);
     flashTimeoutRef.current = window.setTimeout(() => setFlashHotspot(null), 1200);
   }, [hotspots, scrollActiveViewToY, viewMode]);
+
+  // Track which scroll container represents "the" current view per mode, so
+  // the minimap's viewport indicator and its click/drag seeking both target
+  // the right element without duplicating per-mode branching everywhere.
+  const activeScrollEl = useCallback(() => {
+    if (viewMode === 'slider') return sliderScrollRef.current;
+    if (viewMode === 'diff') return diffScrollRef.current;
+    return rightPanelRef.current;
+  }, [viewMode]);
+
+  // Keep the minimap's viewport indicator in sync with actual scroll
+  // position — scrollTop/scrollHeight ratios line up with the diff image's
+  // natural-pixel Y position regardless of zoom, since the whole page is
+  // rendered at one uniform scale, so no extra unit conversion is needed.
+  useEffect(() => {
+    const el = activeScrollEl();
+    if (!el) return undefined;
+    const update = () => {
+      const total = el.scrollHeight || 1;
+      setViewportRatio({ top: el.scrollTop / total, height: Math.min(1, el.clientHeight / total) });
+    };
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      el.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [activeScrollEl, activeIdx, splitZoom, sliderZoom, diffZoom]);
+
+  // Minimap click/drag-to-jump: unlike jumpToHotspot (which targets a known
+  // natural-pixel band), this seeks by scroll-ratio, so it works anywhere on
+  // the page — not just at detected hotspots.
+  const seekToRatio = useCallback((ratio) => {
+    const clamped = Math.max(0, Math.min(1, ratio));
+    const scrollTo = (el) => {
+      if (!el) return;
+      el.scrollTo({ top: clamped * el.scrollHeight, behavior: 'auto' });
+    };
+    if (viewMode === 'split') {
+      scrollTo(leftPanelRef.current);
+      scrollTo(rightPanelRef.current);
+    } else {
+      scrollTo(activeScrollEl());
+    }
+  }, [viewMode, activeScrollEl]);
 
   const goPrev = () => setActiveIdx((i) => Math.max(i - 1, 0));
   const goNext = () => setActiveIdx((i) => Math.min(i + 1, filtered.length - 1));
@@ -742,7 +861,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
             </div>
 
             {/* Comparison area — overflow-y-auto on each column independently */}
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden relative">
               {viewMode === 'split' && (
                 <div className="flex h-full relative">
                   {/* Baseline */}
@@ -829,7 +948,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                     zoom={splitZoom}
                     setZoom={setSplitZoom}
                     getResetZoom={() => 1}
-                    className="absolute bottom-3 right-3 z-20"
+                    className="absolute bottom-3 right-6 z-20"
                   />
                 </div>
               )}
@@ -860,7 +979,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                       zoom={sliderZoom}
                       setZoom={setSliderZoom}
                       getResetZoom={() => 1}
-                      className="absolute bottom-3 right-3 z-20"
+                      className="absolute bottom-3 right-6 z-20"
                     />
                   )}
                 </div>
@@ -899,10 +1018,22 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                       zoom={diffZoom}
                       setZoom={setDiffZoom}
                       getResetZoom={defaultZoom}
-                      className="absolute top-3 right-3"
+                      className="absolute top-3 right-6"
                     />
                   )}
                 </div>
+              )}
+
+              {/* Full-page diff-density minimap — click/drag anywhere on the
+                  strip to jump, complementing the discrete hotspot nav above */}
+              {active.diff && diffDensity.length > 0 && (
+                <Minimap
+                  dark={dark}
+                  density={diffDensity}
+                  viewportTop={viewportRatio.top}
+                  viewportHeight={viewportRatio.height}
+                  onSeek={seekToRatio}
+                />
               )}
             </div>
 
