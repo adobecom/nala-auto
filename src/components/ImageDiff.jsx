@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import ReactCompareImage from 'react-compare-image';
 
 const HOST = 'https://s3-sj3.corp.adobe.com/milo';
 
@@ -65,6 +64,95 @@ const ZoomControls = ({ zoom, setZoom, getResetZoom, className = '' }) => (
     >reset</button>
   </div>
 );
+
+// Slider comparison that keeps both images at their own natural aspect ratio
+// (unlike react-compare-image, which stretches the shorter image with
+// object-fit: cover to match the taller one's height — causing baseline/new
+// content to drift out of vertical alignment whenever page heights differ,
+// which is common for real full-page screenshots).
+const NaturalCompareSlider = ({ leftImage, rightImage, leftLabel, rightLabel }) => {
+  const containerRef = useRef(null);
+  const leftImgRef = useRef(null);
+  const rightImgRef = useRef(null);
+  const draggingRef = useRef(false);
+  const [pos, setPos] = useState(50);
+  const [heights, setHeights] = useState({ left: 0, right: 0 });
+
+  const recompute = useCallback(() => {
+    const width = containerRef.current?.clientWidth || 0;
+    const l = leftImgRef.current;
+    const r = rightImgRef.current;
+    setHeights({
+      left: l?.naturalWidth ? (l.naturalHeight / l.naturalWidth) * width : 0,
+      right: r?.naturalWidth ? (r.naturalHeight / r.naturalWidth) * width : 0,
+    });
+  }, []);
+
+  useEffect(() => {
+    recompute();
+    window.addEventListener('resize', recompute);
+    return () => window.removeEventListener('resize', recompute);
+  }, [recompute, leftImage, rightImage]);
+
+  const updatePosFromClientX = (clientX) => {
+    const rect = containerRef.current.getBoundingClientRect();
+    setPos(Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100)));
+  };
+
+  useEffect(() => {
+    const onMove = (e) => draggingRef.current && updatePosFromClientX(e.clientX);
+    const onUp = () => { draggingRef.current = false; };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, []);
+
+  const height = Math.max(heights.left, heights.right);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative select-none mx-auto"
+      style={{ height: height || undefined, maxWidth: '100%' }}
+    >
+      <img
+        ref={leftImgRef}
+        src={leftImage}
+        alt={leftLabel}
+        onLoad={recompute}
+        className="absolute top-0 left-0 w-full block"
+        style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}
+      />
+      <img
+        ref={rightImgRef}
+        src={rightImage}
+        alt={rightLabel}
+        onLoad={recompute}
+        className="absolute top-0 left-0 w-full block"
+        style={{ clipPath: `inset(0 0 0 ${pos}%)` }}
+      />
+      <div className="absolute top-2 left-2 text-xs bg-black/50 text-white px-2 py-1 rounded pointer-events-none">
+        {leftLabel}
+      </div>
+      <div className="absolute top-2 right-2 text-xs bg-black/50 text-white px-2 py-1 rounded pointer-events-none">
+        {rightLabel}
+      </div>
+      <div
+        className="absolute top-0 bottom-0 flex items-center justify-center cursor-ew-resize z-10"
+        style={{ left: `${pos}%`, transform: 'translateX(-50%)', width: 32 }}
+        onPointerDown={(e) => { draggingRef.current = true; updatePosFromClientX(e.clientX); e.preventDefault(); }}
+      >
+        <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white shadow -translate-x-1/2" />
+        <div className="w-8 h-8 rounded-full bg-white shadow flex items-center justify-center text-gray-500 text-xs">
+          ↔
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const deviceLabel = (b) => {
   if (b === 'ipad') return 'Tablet Chrome';
@@ -489,13 +577,13 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
               )}
 
               {viewMode === 'slider' && (
-                <div className="p-4">
+                <div className="p-4 h-full overflow-auto">
                   {imgUrl(active.a) && imgUrl(active.b) ? (
-                    <ReactCompareImage
+                    <NaturalCompareSlider
                       leftImage={imgUrl(active.a)}
                       rightImage={imgUrl(active.b)}
-                      leftImageLabel="Baseline"
-                      rightImageLabel="New"
+                      leftLabel="Baseline"
+                      rightLabel="New"
                     />
                   ) : (
                     <div className="text-gray-400 text-center mt-8">
