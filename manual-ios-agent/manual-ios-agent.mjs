@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /* global process, Buffer */
 import http from 'node:http';
+import { watchFile } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -10,6 +12,7 @@ const token = process.env.MANUAL_IOS_AGENT_TOKEN || '';
 const viewerUrl = process.env.MANUAL_IOS_VIEWER_URL || '';
 let active = null;
 let expiryTimer = null;
+let restartPending = false;
 
 if (!token || !viewerUrl) {
   throw new Error('Set MANUAL_IOS_AGENT_TOKEN and MANUAL_IOS_VIEWER_URL before starting the agent.');
@@ -36,6 +39,17 @@ async function launchSimulator(udid) {
   await exec('open', ['-a', 'Simulator', '--args', '-CurrentDeviceUDID', udid]);
 }
 
+async function openUrl(udid, href, attempts = 4) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await simctl('openurl', udid, href);
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+    }
+  }
+}
+
 async function createSession({ sessionId, device, iosVersion, url }) {
   if (!sessionId || !device || !iosVersion || !url) throw new Error('sessionId, device, iosVersion, and url are required.');
   const target = new URL(url);
@@ -52,8 +66,9 @@ async function createSession({ sessionId, device, iosVersion, url }) {
   const udid = (await simctl('create', name, deviceType.identifier, runtime.identifier)).stdout.trim();
   try {
     await simctl('boot', udid);
+    await simctl('bootstatus', udid, '-b');
     await launchSimulator(udid);
-    await simctl('openurl', udid, target.href);
+    await openUrl(udid, target.href);
   } catch (error) {
     await simctl('delete', udid).catch(() => {});
     throw error;
@@ -77,7 +92,22 @@ async function endSession(id) {
   await exec('osascript', ['-e', 'tell application id "com.apple.iphonesimulator" to quit']).catch(() => {});
   await simctl('shutdown', udid).catch(() => {});
   await simctl('delete', udid).catch(() => {});
+  if (restartPending) process.exit(0);
 }
+
+// Remove Simulators orphaned by a previous agent process.
+async function cleanupOrphans() {
+  const { devices } = JSON.parse((await simctl('list', 'devices', '--json')).stdout);
+  for (const device of Object.values(devices).flat()) {
+    if (device.name.startsWith('nala-manual-')) await simctl('delete', device.udid).catch(() => {});
+  }
+}
+
+// launchd (KeepAlive) restarts the agent, so deploying new code only needs a file copy.
+watchFile(fileURLToPath(import.meta.url), { interval: 5_000 }, () => {
+  if (active) restartPending = true;
+  else process.exit(0);
+});
 
 http.createServer(async (req, res) => {
   if (req.headers.authorization !== `Bearer ${token}`) return send(res, 401, { error: 'unauthorized' });
@@ -94,3 +124,5 @@ http.createServer(async (req, res) => {
     return send(res, 400, { error: error.message });
   }
 }).listen(port, () => console.log(`manual iOS agent listening on :${port}`));
+
+cleanupOrphans().catch((error) => console.error(`orphan cleanup failed: ${error.message}`));
