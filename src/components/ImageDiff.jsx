@@ -109,6 +109,75 @@ const analyzeDiffHotspots = async (url) => {
   return { naturalWidth, naturalHeight, hotspots, density };
 };
 
+// The AI judge sees far more on the *changed* regions than on a whole-page
+// capture: vision models downscale a 1920x7400 screenshot so aggressively that
+// exactly the details under review (a copy tweak, a few px of drift) are gone
+// before the model looks at it. The hotspot bands computed above already say
+// where the changes are, so reuse them to cut tight, full-width strips.
+const CROP_MAX_REGIONS = 3;
+const CROP_PAD_Y = 48; // vertical context kept around each band
+const CROP_MAX_HEIGHT = 700; // cap a single strip so it stays legible once encoded
+// Only genuinely oversized captures get scaled down — a standard 1920-wide
+// desktop shot must reach the model at native width, or cropping would throw
+// away the very detail it exists to preserve.
+const CROP_MAX_WIDTH = 2000;
+
+const loadBitmap = async (url) => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fetch ${url} failed: ${res.status}`);
+  return createImageBitmap(await res.blob());
+};
+
+// Cut [y0, y1) out of a bitmap at full width. The band coordinates come from
+// the diff image; baseline/new are normally identical in size, but clamp anyway
+// so a height mismatch yields a shorter crop instead of a blank one.
+const cropRegion = (bitmap, y0, y1) => {
+  const top = Math.max(0, Math.min(y0, bitmap.height - 1));
+  const bottom = Math.max(top + 1, Math.min(y1, bitmap.height));
+  const scale = Math.min(1, CROP_MAX_WIDTH / bitmap.width);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round((bottom - top) * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bitmap, 0, top, bitmap.width, bottom - top, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/png');
+};
+
+const buildJudgeRegions = async ({ aUrl, bUrl, diffUrl, hotspots }) => {
+  if (!hotspots.length || !aUrl || !bUrl) return [];
+
+  // Take the densest bands, then restore top-to-bottom order so the model reads
+  // the page the way a reviewer would.
+  const picked = [...hotspots]
+    .sort((x, y) => y.score - x.score)
+    .slice(0, CROP_MAX_REGIONS)
+    .sort((x, y) => x.y0 - y.y0);
+
+  // Pad for surrounding context, then merge bands that overlap once padded.
+  const merged = [];
+  picked.forEach((spot) => {
+    const y0 = Math.max(0, spot.y0 - CROP_PAD_Y);
+    const y1 = Math.min(spot.y1 + CROP_PAD_Y, y0 + CROP_MAX_HEIGHT);
+    const last = merged[merged.length - 1];
+    if (last && y0 <= last.y1) last.y1 = Math.max(last.y1, y1);
+    else merged.push({ y0, y1 });
+  });
+
+  const [aBmp, bBmp, diffBmp] = await Promise.all([
+    loadBitmap(aUrl),
+    loadBitmap(bUrl),
+    diffUrl ? loadBitmap(diffUrl) : null,
+  ]);
+
+  return merged.map(({ y0, y1 }) => ({
+    y0,
+    y1,
+    a: cropRegion(aBmp, y0, y1),
+    b: cropRegion(bBmp, y0, y1),
+    diff: diffBmp ? cropRegion(diffBmp, y0, y1) : null,
+  }));
+};
+
 const Thumb = ({ src }) => {
   const [errored, setErrored] = useState(false);
   if (!src || errored) return <div className="w-full h-full bg-gray-300" />;
@@ -604,10 +673,25 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
     setAiJudging(true);
     setAiJudgment(null);
     try {
+      // Send only the changed strips when we know where they are; the server
+      // falls back to whole-page screenshots when this yields nothing.
+      let regions = [];
+      if (active.diff && hotspots.length) {
+        try {
+          regions = await buildJudgeRegions({
+            aUrl: apiImgUrl(active.a),
+            bUrl: apiImgUrl(active.b),
+            diffUrl: apiImgUrl(active.diff),
+            hotspots,
+          });
+        } catch {
+          regions = [];
+        }
+      }
       const res = await fetch('/lab/judge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ a: active.a, b: active.b, diff: active.diff }),
+        body: JSON.stringify({ a: active.a, b: active.b, diff: active.diff, regions }),
       });
       const json = await res.json();
       setAiJudgment(json);
@@ -616,7 +700,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
     } finally {
       setAiJudging(false);
     }
-  }, [active, aiJudging]);
+  }, [active, aiJudging, hotspots]);
 
   // Detect diff hotspots (bands of the page with actual pixel differences) so
   // the user can jump straight to them instead of scrolling a full-page image.
@@ -1035,6 +1119,11 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                       {typeof aiJudgment.confidence === 'number' && ` ${Math.round(aiJudgment.confidence * 100)}%`}
                     </span>
                     <span className="min-w-0">{aiJudgment.reasoning}</span>
+                    {aiJudgment.regions > 0 && (
+                      <span className="shrink-0 opacity-60">
+                        · {aiJudgment.regions} hotspot{aiJudgment.regions > 1 ? 's' : ''} inspected
+                      </span>
+                    )}
                   </>
                 )}
                 <button

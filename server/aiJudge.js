@@ -34,16 +34,33 @@ async function fetchImageBase64(relPath) {
   return { base64: buf.toString('base64'), mimeType: contentType.split(';')[0] };
 }
 
-const PROMPT = `You are a visual regression testing expert for websites. You will see two full-page screenshots of a web page: "baseline" (old version / production) and "new" (new version / staging), plus optionally a pixel-level diff overlay image (red = changed pixels).
+const MAX_REGIONS = 4;
 
-Decide whether this diff represents a genuine, meaningful visual/content regression (e.g. copy changes, broken layout, missing or extra content, broken styling, clearly wrong colors/spacing) or harmless noise (e.g. carousel/video frames caught at different moments, timestamps, randomized recommended content, ads or promo banners, mid-animation transition states, hover states).
+// Client-cropped strips arrive as "data:image/png;base64,...."
+function parseDataUrl(dataUrl) {
+  const m = /^data:([^;,]+);base64,(.+)$/.exec(typeof dataUrl === 'string' ? dataUrl : '');
+  if (!m) return null;
+  return { mimeType: m[1], base64: m[2] };
+}
+
+const TASK = `Decide whether this diff represents a genuine, meaningful visual/content regression (e.g. copy changes, broken layout, missing or extra content, broken styling, clearly wrong colors/spacing) or harmless noise (e.g. carousel/video frames caught at different moments, timestamps, randomized recommended content, ads or promo banners, mid-animation transition states, hover states).
 
 Output ONLY a single JSON object, with no other text and no markdown code fences, in exactly this shape:
 {"verdict": "regression" | "noise" | "uncertain", "confidence": a number between 0 and 1, "reasoning": "a short explanation in English pointing to the specific area and what you observed"}`;
 
-async function callOpenAiCompatible({ baseUrl, apiKey, model, images }) {
+const FULL_PAGE_PROMPT = `You are a visual regression testing expert for websites. You will see two full-page screenshots of a web page: "baseline" (old version / production) and "new" (new version / staging), plus optionally a pixel-level diff overlay image (red = changed pixels).
+
+${TASK}`;
+
+// Cropped strips beat whole pages: a full-page capture is thousands of pixels
+// tall and gets downsampled into illegibility before the model sees it.
+const regionPrompt = (count) => `You are a visual regression testing expert for websites. Pixel comparison has already located the ${count} region(s) of the page that changed, and each is supplied as a cropped, full-width horizontal strip: "baseline" (old version / production), "new" (new version / staging), and where available a pixel-level diff overlay (red = changed pixels). Each strip is labelled with its vertical pixel range on the full page. Everything outside these strips is identical and is not shown.
+
+${TASK}`;
+
+async function callOpenAiCompatible({ baseUrl, apiKey, model, images, prompt }) {
   const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
-  const content = [{ type: 'text', text: PROMPT }];
+  const content = [{ type: 'text', text: prompt }];
   images.forEach(({ base64, mimeType, label }) => {
     content.push({ type: 'text', text: label });
     content.push({ type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } });
@@ -61,9 +78,9 @@ async function callOpenAiCompatible({ baseUrl, apiKey, model, images }) {
   return json.choices?.[0]?.message?.content || '';
 }
 
-async function callAnthropic({ baseUrl, apiKey, model, images }) {
+async function callAnthropic({ baseUrl, apiKey, model, images, prompt }) {
   const url = `${(baseUrl || 'https://api.anthropic.com').replace(/\/$/, '')}/v1/messages`;
-  const content = [{ type: 'text', text: PROMPT }];
+  const content = [{ type: 'text', text: prompt }];
   images.forEach(({ base64, mimeType, label }) => {
     content.push({ type: 'text', text: label });
     content.push({ type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } });
@@ -102,7 +119,10 @@ export function isConfigured() {
 
 // { a, b, diff }: S3-relative image paths, same shape as the entries in a
 // dataset's results.json (e.g. "screenshots/bacom-live-qa/Foo-chrome-a.png").
-export async function judgeDiff({ a, b, diff }) {
+// { regions }: optional client-cropped strips around the detected diff bands,
+// each { y0, y1, a, b, diff } where the images are PNG data URLs. When present
+// they replace the full-page screenshots — same page, far more legible.
+export async function judgeDiff({ a, b, diff, regions }) {
   const apiKey = process.env.AI_JUDGE_API_KEY;
   if (!apiKey) {
     const err = new Error('AI_JUDGE_API_KEY not set');
@@ -113,20 +133,35 @@ export async function judgeDiff({ a, b, diff }) {
   const baseUrl = process.env.AI_JUDGE_BASE_URL || (provider === 'anthropic' ? undefined : 'https://api.openai.com/v1');
   const model = process.env.AI_JUDGE_MODEL || (provider === 'anthropic' ? 'claude-3-5-haiku-latest' : 'gpt-4o-mini');
 
-  const [imgA, imgB, imgDiff] = await Promise.all([
-    fetchImageBase64(a),
-    fetchImageBase64(b),
-    diff ? fetchImageBase64(diff) : Promise.resolve(null),
-  ]);
-  const images = [
-    { ...imgA, label: '[baseline]' },
-    { ...imgB, label: '[new]' },
-  ];
-  if (imgDiff) images.push({ ...imgDiff, label: '[pixel-diff overlay, red = changed pixels]' });
+  const crops = (Array.isArray(regions) ? regions : [])
+    .map((r) => ({ y0: r.y0, y1: r.y1, a: parseDataUrl(r.a), b: parseDataUrl(r.b), diff: parseDataUrl(r.diff) }))
+    .filter((r) => r.a && r.b)
+    .slice(0, MAX_REGIONS);
+
+  const images = [];
+  let prompt;
+  if (crops.length) {
+    prompt = regionPrompt(crops.length);
+    crops.forEach((r, i) => {
+      const where = `region ${i + 1} of ${crops.length}, full page width, vertical pixels ${r.y0}-${r.y1}`;
+      images.push({ ...r.a, label: `[${where} — baseline]` });
+      images.push({ ...r.b, label: `[${where} — new]` });
+      if (r.diff) images.push({ ...r.diff, label: `[${where} — pixel-diff overlay, red = changed pixels]` });
+    });
+  } else {
+    prompt = FULL_PAGE_PROMPT;
+    const [imgA, imgB, imgDiff] = await Promise.all([
+      fetchImageBase64(a),
+      fetchImageBase64(b),
+      diff ? fetchImageBase64(diff) : Promise.resolve(null),
+    ]);
+    images.push({ ...imgA, label: '[baseline]' }, { ...imgB, label: '[new]' });
+    if (imgDiff) images.push({ ...imgDiff, label: '[pixel-diff overlay, red = changed pixels]' });
+  }
 
   const raw = provider === 'anthropic'
-    ? await callAnthropic({ baseUrl, apiKey, model, images })
-    : await callOpenAiCompatible({ baseUrl, apiKey, model, images });
+    ? await callAnthropic({ baseUrl, apiKey, model, images, prompt })
+    : await callOpenAiCompatible({ baseUrl, apiKey, model, images, prompt });
 
-  return parseVerdict(raw);
+  return { ...parseVerdict(raw), regions: crops.length };
 }

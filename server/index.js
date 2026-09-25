@@ -75,7 +75,7 @@ const server = http.createServer(async (req, res) => {
     // Gracefully reports "not configured" (200, not an error) instead of
     // failing when no AI_JUDGE_API_KEY is set, so the button always renders.
     if (p === '/lab/judge' && req.method === 'POST') {
-      const { a, b, diff } = await readBody(req);
+      const { a, b, diff, regions } = await readBody(req);
       if (!a || !b) return send(res, 400, { error: 'missing a/b image paths' });
       if (!aiJudge.isConfigured()) {
         return send(res, 200, {
@@ -84,7 +84,7 @@ const server = http.createServer(async (req, res) => {
         });
       }
       try {
-        const result = await aiJudge.judgeDiff({ a, b, diff });
+        const result = await aiJudge.judgeDiff({ a, b, diff, regions });
         return send(res, 200, { configured: true, ...result });
       } catch (e) {
         return send(res, 502, { configured: true, error: String(e.message || e) });
