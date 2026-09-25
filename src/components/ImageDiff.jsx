@@ -588,7 +588,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
 
   const active = filtered[activeIdx] ?? null;
 
-  // Reset any previous "AI 判断" result when the user navigates to a
+  // Reset any previous "AI Judge" result when the user navigates to a
   // different snapshot — a stale judgment for the old image pair would be
   // misleading if left on screen.
   useEffect(() => {
@@ -992,7 +992,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                 </div>
               )}
 
-              {/* AI 判断 — sends baseline/new/diff images to whichever
+              {/* AI Judge — sends baseline/new/diff images to whichever
                   vision model the backend has configured (server/aiJudge.js)
                   and asks it to call the diff a regression or noise. */}
               <button
@@ -1003,13 +1003,13 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                     ? 'border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600'
                     : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
                 }`}
-                title="用 AI 判断这个 diff 是否为真实回归"
+                title="Use AI to judge whether this diff is a real regression"
               >
-                {aiJudging ? '🤖 判断中…' : '🤖 AI 判断'}
+                {aiJudging ? '🤖 Judging…' : '🤖 AI Judge'}
               </button>
             </div>
 
-            {/* AI 判断结果面板 */}
+            {/* AI judge result banner */}
             {aiJudgment && (
               <div
                 className={`flex items-start gap-2 px-3 py-1.5 text-xs border-b flex-shrink-0 ${
@@ -1019,7 +1019,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                 {aiJudgment.configured === false ? (
                   <span className="text-amber-500">⚠️ {aiJudgment.message}</span>
                 ) : aiJudgment.error ? (
-                  <span className="text-red-500">❌ AI 判断失败：{aiJudgment.error}</span>
+                  <span className="text-red-500">❌ AI judge failed: {aiJudgment.error}</span>
                 ) : (
                   <>
                     <span
@@ -1031,7 +1031,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                             : 'bg-gray-200 text-gray-600'
                       }`}
                     >
-                      {aiJudgment.verdict === 'regression' ? '🔴 疑似回归' : aiJudgment.verdict === 'noise' ? '🟢 噪音' : '⚪ 不确定'}
+                      {aiJudgment.verdict === 'regression' ? '🔴 Likely regression' : aiJudgment.verdict === 'noise' ? '🟢 Noise' : '⚪ Uncertain'}
                       {typeof aiJudgment.confidence === 'number' && ` ${Math.round(aiJudgment.confidence * 100)}%`}
                     </span>
                     <span className="min-w-0">{aiJudgment.reasoning}</span>

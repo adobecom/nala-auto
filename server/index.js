@@ -68,7 +68,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // "AI 判断" button on the imagediff page: send one snapshot's
+    // "AI Judge" button on the imagediff page: send one snapshot's
     // baseline/new/diff image paths, get back a vision-model verdict on
     // whether the diff is a real regression or noise. See aiJudge.js for the
     // pluggable provider config (env vars) and README.md for setup notes.
@@ -80,7 +80,7 @@ const server = http.createServer(async (req, res) => {
       if (!aiJudge.isConfigured()) {
         return send(res, 200, {
           configured: false,
-          message: '未配置 AI 判断服务：请设置 AI_JUDGE_API_KEY（以及可选的 AI_JUDGE_PROVIDER / AI_JUDGE_BASE_URL / AI_JUDGE_MODEL）环境变量后重启后端。见 README.md。',
+          message: 'AI judge is not configured: set the AI_JUDGE_API_KEY environment variable (plus optional AI_JUDGE_PROVIDER / AI_JUDGE_BASE_URL / AI_JUDGE_MODEL) and restart the backend. See README.md.',
         });
       }
       try {

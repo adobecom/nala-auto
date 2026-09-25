@@ -1,5 +1,5 @@
 // nala-auto AI diff judge — optional, pluggable vision-model backend for the
-// "AI 判断" (AI judge) button in ImageDiff.jsx.
+// "AI Judge" button in ImageDiff.jsx.
 //
 // This module does NOT ship with any bundled model or API key. It calls
 // whatever OpenAI- or Anthropic-compatible vision endpoint the deployer
@@ -16,7 +16,7 @@
 // Without AI_JUDGE_API_KEY set, isConfigured() returns false and the /lab/judge
 // route in index.js responds with a friendly "not configured" message instead
 // of erroring — the button in the UI still renders, it just explains what an
-// admin needs to set up. See README.md "AI 判断" section for provider notes.
+// admin needs to set up. See README.md "AI Judge" section for provider notes.
 /* global process, Buffer */
 
 const S3_HOST = 'https://s3-sj3.corp.adobe.com/milo';
@@ -34,12 +34,12 @@ async function fetchImageBase64(relPath) {
   return { base64: buf.toString('base64'), mimeType: contentType.split(';')[0] };
 }
 
-const PROMPT = `你是网站视觉回归测试专家。你会看到两张网页整页截图：baseline（旧版本/生产环境）和 new（新版本/预发环境），以及可能有一张像素级 diff 叠加图（红色=有变化的像素）。
+const PROMPT = `You are a visual regression testing expert for websites. You will see two full-page screenshots of a web page: "baseline" (old version / production) and "new" (new version / staging), plus optionally a pixel-level diff overlay image (red = changed pixels).
 
-请判断这个 diff 是否代表真正有意义的视觉/内容回归（例如：文案变化、布局错位、缺失或多余的内容、样式损坏、颜色/间距明显错误），还是无关紧要的噪音（例如：轮播图/视频抓到不同帧、时间戳、随机推荐内容、广告或促销横幅、动画过渡中间状态、鼠标悬停状态）。
+Decide whether this diff represents a genuine, meaningful visual/content regression (e.g. copy changes, broken layout, missing or extra content, broken styling, clearly wrong colors/spacing) or harmless noise (e.g. carousel/video frames caught at different moments, timestamps, randomized recommended content, ads or promo banners, mid-animation transition states, hover states).
 
-只输出一个 JSON 对象，不要有任何其他文字或 markdown 代码块标记，格式严格为：
-{"verdict": "regression" | "noise" | "uncertain", "confidence": 0到1之间的数字, "reasoning": "简短中文说明，指出具体在哪个区域看到了什么"}`;
+Output ONLY a single JSON object, with no other text and no markdown code fences, in exactly this shape:
+{"verdict": "regression" | "noise" | "uncertain", "confidence": a number between 0 and 1, "reasoning": "a short explanation in English pointing to the specific area and what you observed"}`;
 
 async function callOpenAiCompatible({ baseUrl, apiKey, model, images }) {
   const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
@@ -83,7 +83,7 @@ async function callAnthropic({ baseUrl, apiKey, model, images }) {
 
 function parseVerdict(raw) {
   const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return { verdict: 'uncertain', confidence: null, reasoning: raw.trim() || '模型未返回可解析的结果' };
+  if (!match) return { verdict: 'uncertain', confidence: null, reasoning: raw.trim() || 'The model did not return a parseable result' };
   try {
     const parsed = JSON.parse(match[0]);
     return {
