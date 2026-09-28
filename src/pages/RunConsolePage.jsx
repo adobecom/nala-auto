@@ -19,8 +19,7 @@ const STATUS_STYLES = {
   completed: 'bg-slate-400 text-white',
   error: 'bg-rose-600 text-white',
 };
-const statusText = (status, conclusion) => (status === 'completed' ? conclusion || 'done' : status);
-const statusCls = (status, conclusion) =>
+const statusText = (status, conclusion) => (status === 'completed' ? conclusion || 'done' : status);const statusCls = (status, conclusion) =>
   STATUS_STYLES[statusText(status, conclusion)] || 'bg-slate-400 text-white';
 
 const renderPill = (status, conclusion) => (
@@ -34,6 +33,41 @@ const renderPill = (status, conclusion) => (
   </span>
 );
 
+// Mirrors server/figmaCompare.js so a bad paste is explained while typing
+// instead of failing on dispatch. Each returns an error string, or null when ok.
+const FIGMA_PATH = /^\/(design|file|proto|board|slides)\/([A-Za-z0-9]{10,})(?:\/|$)/;
+const SELECTOR_MAX = 200;
+
+const webUrlError = (raw) => {
+  const v = (raw || '').trim();
+  if (!v) return null;
+  return /^https?:\/\/\S+$/i.test(v) ? null : `Not a valid web page URL: ${v}`;
+};
+
+const figmaUrlError = (raw) => {
+  const v = (raw || '').trim();
+  if (!v) return null;
+  let url;
+  try {
+    url = new URL(v);
+  } catch {
+    return `Not a valid Figma URL: ${v}`;
+  }
+  if (!/(^|\.)figma\.com$/i.test(url.hostname)) return `Not a figma.com URL: ${url.hostname}`;
+  if (!FIGMA_PATH.exec(url.pathname)) return 'Figma URL must contain a file key, e.g. https://www.figma.com/design/<fileKey>/…';
+  const nodeId = (url.searchParams.get('node-id') || '').trim();
+  if (!nodeId) return 'Figma URL is missing node-id — use "Copy link to selection" on the frame in Figma.';
+  if (!/^\d+[-:]\d+$/.test(nodeId)) return `Not a valid Figma node-id: ${nodeId}`;
+  return null;
+};
+
+const selectorError = (raw) => {
+  const v = (raw || '').trim();
+  if (!v) return null;
+  if (v.length > SELECTOR_MAX) return `Selector is too long (max ${SELECTOR_MAX} characters).`;
+  return null;
+};
+
 // SharePoint folder where the screenshot-diff baseline data is updated.
 const DATA_URL =
   'https://adobe.sharepoint.com/sites/adobecom/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2Fadobecom%2FShared%20Documents%2Fmilo%2Fdrafts%2Fnala%2Fscreenshotdiff%2Fdata&viewid=d776cf70%2D9b7e%2D4ab7%2Db9da%2D9e0f8e03a7d2';
@@ -41,13 +75,18 @@ const DATA_URL =
 const RunConsolePage = () => {
   const [searchParams] = useSearchParams();
   const preselectedSite = searchParams.get('site');
-  const initialKind = ['screenshot', 'quick', 'ios'].includes(searchParams.get('mode')) ? searchParams.get('mode') : 'screenshot';
+  const initialKind = ['screenshot', 'quick', 'ios', 'figma'].includes(searchParams.get('mode')) ? searchParams.get('mode') : 'screenshot';
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeMenu, setActiveMenu] = useState('MILOCORE');
   const [config, setConfig] = useState(null);
-  const [kind, setKind] = useState(initialKind); // 'screenshot' | 'quick' | 'ios'
+  const [kind, setKind] = useState(initialKind); // 'screenshot' | 'quick' | 'ios' | 'figma'
   const [quickUrls, setQuickUrls] = useState('');
   const [quickViewports, setQuickViewports] = useState(['chrome', 'ipad', 'iphone']);
+  const [figmaWebUrl, setFigmaWebUrl] = useState('');
+  const [figmaUrl, setFigmaUrl] = useState('');
+  const [figmaSelector, setFigmaSelector] = useState('');
+  // A Figma frame is drawn at one width, so a compare run targets exactly one viewport.
+  const [figmaViewport, setFigmaViewport] = useState('chrome');
   const [site, setSite] = useState(preselectedSite || 'bacom');
   const [milolibs, setMilolibs] = useState('?milolibs=stage');
   const [selDevices, setSelDevices] = useState(['iPhone 15']);
@@ -195,12 +234,25 @@ const RunConsolePage = () => {
   const shards = Math.max(1, Math.floor(iosRunners / Math.max(1, combos)));
   const parallelJobs = combos * shards;
 
-  const sessions = kind === 'ios' ? combos : kind === 'quick' ? quickViewports.length : (config?.shards?.length || 3);
+  const figmaWebError = webUrlError(figmaWebUrl);
+  const figmaLinkError = figmaUrlError(figmaUrl);
+  const figmaSelError = selectorError(figmaSelector);
+  const figmaReady =
+    !!figmaWebUrl.trim() && !!figmaUrl.trim() && !!figmaSelector.trim() &&
+    !figmaWebError && !figmaLinkError && !figmaSelError && !!figmaViewport;
+
+  const sessions =
+    kind === 'ios' ? combos
+      : kind === 'quick' ? quickViewports.length
+        : kind === 'figma' ? 1
+          : (config?.shards?.length || 3);
   const canRun = !busy && (kind === 'ios'
     ? combos > 0
     : kind === 'quick'
       ? quickLines.length > 0 && !quickError && quickViewports.length > 0
-      : true);
+      : kind === 'figma'
+        ? figmaReady
+        : true);
 
   const start = async () => {
     setBusy(true);
@@ -214,7 +266,16 @@ const RunConsolePage = () => {
         ? { kind, site, milolibs, iosVersions: selVersions, devices: selDevices }
         : kind === 'quick'
           ? { kind, milolibs, urls: quickUrls, viewports: quickViewports }
-          : { kind, site, milolibs };
+          : kind === 'figma'
+            ? {
+                kind,
+                milolibs,
+                urls: figmaWebUrl.trim(),
+                figmaUrl: figmaUrl.trim(),
+                selector: figmaSelector.trim(),
+                viewports: [figmaViewport],
+              }
+            : { kind, site, milolibs };
     try {
       const res = await fetch('/lab/runs', {
         method: 'POST',
@@ -234,7 +295,9 @@ const RunConsolePage = () => {
         runKind: kind,
         site: data.site || site,
         milolibs,
-        viewports: kind === 'quick' ? quickViewports : undefined,
+        viewports: kind === 'quick' ? quickViewports : kind === 'figma' ? [figmaViewport] : undefined,
+        figmaUrl: kind === 'figma' ? figmaUrl.trim() : undefined,
+        selector: kind === 'figma' ? figmaSelector.trim() : undefined,
         devices: selDevices,
         mode: data.mode,
         status: 'dispatching',
@@ -242,6 +305,7 @@ const RunConsolePage = () => {
         conclusion: null,
         htmlUrl: null,
         resultsUrl: data.resultsUrl,
+        latestResultsUrl: data.latestResultsUrl,
         done: false,
       });
       openStream(data.runId);
@@ -251,6 +315,21 @@ const RunConsolePage = () => {
       setBusy(false);
     }
   };
+
+  const viewportLabel = (v) => (config?.viewportLabels || { chrome: 'Desktop', ipad: 'Tablet', iphone: 'Mobile' })[v] || v;
+
+  // One-line description of a run, used by both Recent runs and the live panel.
+  const runLabel = (r) => {
+    if (r.runKind === 'ios') return `iOS · ${(r.devices || [r.device]).filter(Boolean).join(', ')}`;
+    if (r.runKind === 'quick') {
+      const n = (r.urls || []).length;
+      return `⚡ Quick · ${n} URL${n === 1 ? '' : 's'}`;
+    }
+    if (r.runKind === 'figma') return `🎨 Figma · ${(r.viewports || []).map(viewportLabel).join(', ')}`;
+    return 'Viewport';
+  };
+  // Published results are pruned upstream — never imply long-term archival.
+  const retention = { datasetKeepRuns: 3, datasetMaxDays: 7, oneOffMaxHours: 24, ...(config?.retention || {}) };
 
   const isMock = config?.mode !== 'live';
   const pacificTime = (timestamp) =>
@@ -342,10 +421,81 @@ const RunConsolePage = () => {
               <button className={segBtn(kind === 'quick')} onClick={() => setKind('quick')}>
                 ⚡ Quick run
               </button>
+              <button className={segBtn(kind === 'figma')} onClick={() => setKind('figma')}>
+                🎨 Figma compare
+              </button>
               <button className={segBtn(kind === 'ios')} onClick={() => setKind('ios')}>
                 Real iOS · Simulator
               </button>
             </div>
+
+            {kind === 'figma' && (
+              <div className="space-y-4">
+                <label className="block">
+                  <span className={`mb-1 block text-sm font-medium ${subtle}`}>Web page URL</span>
+                  <input
+                    className={`w-full rounded-lg border px-3 py-2 font-mono text-sm ${field}`}
+                    value={figmaWebUrl}
+                    onChange={(e) => setFigmaWebUrl(e.target.value)}
+                    spellCheck={false}
+                    placeholder="https://business.adobe.com/products/genstudio.html"
+                  />
+                  <span className={`mt-1 block text-xs ${figmaWebError ? 'text-rose-500' : subtle}`}>
+                    {figmaWebError || 'The live page whose rendered region is compared against the design.'}
+                  </span>
+                </label>
+
+                <label className="block">
+                  <span className={`mb-1 block text-sm font-medium ${subtle}`}>Figma design or prototype URL</span>
+                  <input
+                    className={`w-full rounded-lg border px-3 py-2 font-mono text-sm ${field}`}
+                    value={figmaUrl}
+                    onChange={(e) => setFigmaUrl(e.target.value)}
+                    spellCheck={false}
+                    placeholder="https://www.figma.com/design/AbCdEf123456/Marquee?node-id=12-345"
+                  />
+                  <span className={`mt-1 block text-xs ${figmaLinkError ? 'text-rose-500' : subtle}`}>
+                    {figmaLinkError || 'Select the frame in Figma → right-click → Copy link to selection, so the URL carries both the file key and node-id.'}
+                  </span>
+                </label>
+
+                <label className="block">
+                  <span className={`mb-1 block text-sm font-medium ${subtle}`}>CSS selector (required)</span>
+                  <input
+                    className={`w-full rounded-lg border px-3 py-2 font-mono text-sm ${field}`}
+                    value={figmaSelector}
+                    onChange={(e) => setFigmaSelector(e.target.value)}
+                    spellCheck={false}
+                    placeholder=".marquee.split"
+                  />
+                  <span className={`mt-1 block text-xs ${figmaSelError ? 'text-rose-500' : subtle}`}>
+                    {figmaSelError
+                      || 'The selector identifies the DOM region on the page that corresponds to the Figma node — only that element is captured and diffed, not the whole page.'}
+                  </span>
+                </label>
+
+                <div>
+                  <div className={`mb-2 text-sm font-medium ${subtle}`}>
+                    Viewport — pick exactly one (a Figma frame is drawn at a single width)
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(config?.shards || ['chrome', 'ipad', 'iphone']).map((v) => (
+                      <button
+                        key={v}
+                        className={chip(figmaViewport === v, false)}
+                        onClick={() => setFigmaViewport(v)}
+                      >
+                        {viewportLabel(v)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={`rounded-lg px-3 py-2 text-xs ${isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                  Results publish to their own one-off dataset, <code>figma-&lt;runId&gt;</code>, and are kept for {retention.oneOffMaxHours}h.
+                </div>
+              </div>
+            )}
 
             {kind === 'quick' && (
               <label className="block">
@@ -369,7 +519,7 @@ const RunConsolePage = () => {
             )}
 
             <div className="grid gap-4 md:grid-cols-2">
-              {kind !== 'quick' && (
+              {kind !== 'quick' && kind !== 'figma' && (
               <label className="block">
                 <span className={`mb-1 block text-sm font-medium ${subtle}`}>Site</span>
                 <select
@@ -396,7 +546,7 @@ const RunConsolePage = () => {
               </label>
             </div>
 
-            {kind === 'quick' ? (
+            {kind === 'figma' ? null : kind === 'quick' ? (
               <div>
                 <div className={`mb-2 text-sm font-medium ${subtle}`}>
                   Viewports — pick any; each is a parallel job
@@ -517,7 +667,7 @@ const RunConsolePage = () => {
                   >
                     {renderPill(r.status, r.conclusion)}
                     <span className={`font-mono ${subtle}`}>#{r.runId}</span>
-                    <span className={text}>{r.runKind === 'ios' ? `iOS · ${(r.devices || [r.device]).filter(Boolean).join(', ')}` : r.runKind === 'quick' ? `⚡ Quick · ${(r.urls || []).length} URL${(r.urls || []).length === 1 ? '' : 's'}` : 'Viewport'}</span>
+                    <span className={text}>{runLabel(r)}</span>
                     <span className={`${subtle} truncate`}>{r.site}</span>
                     {r.startedAt && <span className={`text-xs ${subtle}`}>{pacificTime(r.startedAt)}</span>}
                     {!r.done && <span className="ml-auto text-xs font-semibold text-sky-500">● live</span>}
@@ -537,8 +687,13 @@ const RunConsolePage = () => {
                   <h2 className={`text-lg font-semibold ${text}`}>Run {run.runId ? `#${run.runId}` : ''}</h2>
                   {renderPill(run.status, run.conclusion)}
                   <span className={`text-sm ${subtle}`}>
-                    {run.runKind === 'ios' ? `iOS · ${(run.devices || [run.device].filter(Boolean)).join(', ')}` : run.runKind === 'quick' ? `⚡ Quick · ${(run.viewports || []).join(', ')}` : 'Viewport'} · {run.site} · {run.milolibs}
+                    {runLabel(run)} · {run.site} · {run.milolibs}
                   </span>
+                  {run.runKind === 'figma' && run.selector && (
+                    <span className={`font-mono text-xs ${subtle}`} title={run.figmaUrl}>
+                      {run.selector}
+                    </span>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   {run.htmlUrl && (

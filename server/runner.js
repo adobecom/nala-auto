@@ -1,7 +1,9 @@
-// Run store + driver. Supports three run kinds:
+// Run store + driver. Supports four run kinds:
 //   - 'screenshot' → the existing screenshot-diff-nala-parallel.yml (chrome/ipad/iphone shards)
 //   - 'quick'      → same workflow on an ad-hoc URL list, published as its own
 //                    one-off dataset (quick-<runId>) so it never touches a real one
+//   - 'figma'      → one web URL vs one Figma node, scoped to one CSS selector and
+//                    one viewport, published as its own dataset (figma-<runId>)
 //   - 'ios'        → run-nala-ios.yml (one job per selected iOS Simulator version)
 // LIVE mode dispatches the real workflow and polls its jobs; MOCK mode
 // simulates the same lifecycle so the UI is fully demoable with no token.
@@ -11,6 +13,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as gh from './github.js';
 import { screenshotSiteInputs } from './workflowSites.js';
+import { parseFigmaRun } from './figmaCompare.js';
+import { resultsUrl } from './resultPaths.js';
 
 const runs = new Map();
 const NALA_BASE = process.env.NALA_AUTO_BASE || 'http://nala-auto.corp.adobe.com';
@@ -27,7 +31,7 @@ const STATE_FILE =
 const PLAIN_FIELDS = [
   'id', 'kind', 'site', 'milolibs', 'device', 'devices', 'iosVersions', 'maxUrls',
   'mode', 'startedAt', 'ghRunId', 'htmlUrl', 'status', 'conclusion', 'note', 'jobs',
-  'resultsUrl', 'done', 'urls', 'viewports',
+  'resultsUrl', 'latestResultsUrl', 'done', 'urls', 'viewports', 'figmaUrl', 'figmaFileKey', 'figmaNodeId', 'selector',
 ];
 
 export const VIEWPORTS = ['chrome', 'ipad', 'iphone'];
@@ -89,6 +93,10 @@ function makeRun(f) {
         milolibs: this.milolibs,
         urls: this.urls,
         viewports: this.viewports,
+        figmaUrl: this.figmaUrl,
+        figmaFileKey: this.figmaFileKey,
+        figmaNodeId: this.figmaNodeId,
+        selector: this.selector,
         device: this.device,
         devices: this.devices,
         iosVersions: this.iosVersions,
@@ -100,6 +108,7 @@ function makeRun(f) {
         htmlUrl: this.htmlUrl,
         jobs: this.jobs,
         resultsUrl: this.resultsUrl,
+        latestResultsUrl: this.latestResultsUrl,
         done: this.done,
         startedAt: this.startedAt,
       };
@@ -108,12 +117,13 @@ function makeRun(f) {
 }
 
 export function createRun(body = {}) {
-  const kind = ['ios', 'quick'].includes(body.kind) ? body.kind : 'screenshot';
-  // Throws on a bad list; index.js turns that into a 400.
-  const urls = kind === 'quick' ? parseQuickUrls(body.urls) : undefined;
+  const kind = ['ios', 'quick', 'figma'].includes(body.kind) ? body.kind : 'screenshot';
+  // Throws on a bad list/URL/selector; index.js turns that into a 400.
+  const figma = kind === 'figma' ? parseFigmaRun(body, VIEWPORTS) : null;
+  const urls = kind === 'quick' ? parseQuickUrls(body.urls) : figma ? [figma.webUrl] : undefined;
   const picked = Array.isArray(body.viewports) ? VIEWPORTS.filter((v) => body.viewports.includes(v)) : [];
   if (kind === 'quick' && !picked.length) throw new Error('Pick at least one viewport.');
-  const viewports = kind === 'quick' ? picked : undefined;
+  const viewports = kind === 'quick' ? picked : figma ? [figma.viewport] : undefined;
   const milolibs = (body.milolibs ?? '?milolibs=stage').trim();
   const device = (body.device || 'iPhone 15').trim();
   const devices =
@@ -122,7 +132,10 @@ export function createRun(body = {}) {
     Array.isArray(body.iosVersions) && body.iosVersions.length ? body.iosVersions : ['18.3'];
   const maxUrls = Number(body.maxUrls || 0);
   const id = randomUUID().slice(0, 8);
-  const site = kind === 'quick' ? `quick-${id}` : (body.site || 'bacom').trim();
+  // One-off kinds publish to their own dataset so they never overwrite a real
+  // site's results and each run keeps a stable /imagediff/<site> link.
+  const site =
+    kind === 'quick' ? `quick-${id}` : kind === 'figma' ? `figma-${id}` : (body.site || 'bacom').trim();
   const live = gh.isLive();
 
   const runnablePairs = devices.flatMap((d) => iosVersions.filter((v) => pairRunnable(d, v)).map((v) => ({ d, v })));
@@ -144,6 +157,10 @@ export function createRun(body = {}) {
     maxUrls,
     urls,
     viewports,
+    figmaUrl: figma?.figma.url,
+    figmaFileKey: figma?.figma.fileKey,
+    figmaNodeId: figma?.figma.nodeId,
+    selector: figma?.selector,
     mode: live ? 'live' : 'mock',
     startedAt: Date.now(),
     ghRunId: null,
@@ -152,7 +169,10 @@ export function createRun(body = {}) {
     conclusion: null,
     note: null,
     jobs: live ? [] : mockJobs,
-    resultsUrl: `${NALA_BASE}/imagediff/${site}`,
+    // Pin the link to this run's immutable output so a dataset's older results
+    // stay reachable after the next run overwrites "latest".
+    resultsUrl: resultsUrl(NALA_BASE, site, id),
+    latestResultsUrl: resultsUrl(NALA_BASE, site),
     done: false,
   });
 
@@ -213,8 +233,14 @@ function finish(run, conclusion) {
 }
 
 export function inputsFor(run) {
+  // Every dispatch carries run_id: the workflow publishes its output under
+  // .../runs/<run_id>/ so a dataset keeps every run instead of only the latest,
+  // and the console can correlate a dispatch with the GitHub run it created.
+  // Omitted entirely when absent so a payload never carries an undefined input.
+  const runId = run.id ? { run_id: run.id } : {};
   if (run.kind === 'ios') {
     return {
+      ...runId,
       site: run.site,
       milo_libs: run.milolibs,
       ios_versions: run.iosVersions.join(','),
@@ -225,6 +251,7 @@ export function inputsFor(run) {
   }
   if (run.kind === 'quick') {
     return {
+      ...runId,
       site: 'custom',
       custom_site: run.site,
       milo_libs: run.milolibs,
@@ -232,7 +259,23 @@ export function inputsFor(run) {
       viewports: run.viewports.join(','),
     };
   }
-  return { ...screenshotSiteInputs(run.site), milo_libs: run.milolibs };
+  // Figma compare reuses the screenshot workflow's one-off dataset seam
+  // (site=custom + custom_site) and adds the two Figma-specific inputs. The
+  // runner screenshots only `selector` on the page and diffs it against the
+  // node in `figma_url`.
+  if (run.kind === 'figma') {
+    return {
+      ...runId,
+      site: 'custom',
+      custom_site: run.site,
+      milo_libs: run.milolibs,
+      urls: run.urls.join('\n'),
+      viewports: run.viewports.join(','),
+      figma_url: run.figmaUrl,
+      selector: run.selector,
+    };
+  }
+  return { ...runId, ...screenshotSiteInputs(run.site), milo_libs: run.milolibs };
 }
 
 async function driveLive(run) {

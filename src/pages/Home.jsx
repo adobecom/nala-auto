@@ -187,6 +187,13 @@ const HomePage = () => {
               ⚡ Quick run
             </a>
             <a
+              href="/console?mode=figma"
+              className={`rounded-lg px-4 py-2.5 text-sm font-semibold ${isDarkMode ? 'bg-gray-800 text-fuchsia-300 hover:bg-gray-700' : 'bg-white text-fuchsia-700 ring-1 ring-fuchsia-200 hover:bg-fuchsia-50'}`}
+              title="Diff one page region against the matching Figma frame"
+            >
+              🎨 Figma compare
+            </a>
+            <a
               href="/manual-ios"
               className={`rounded-lg px-4 py-2.5 text-sm font-semibold ${isDarkMode ? 'bg-gray-800 text-emerald-300 hover:bg-gray-700' : 'bg-white text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-50'}`}
             >
@@ -203,7 +210,7 @@ const HomePage = () => {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            {['Desktop · chrome / ipad / iphone', 'Real iOS · Simulator (full-page)', 'Auto → S3 → results'].map((f) => (
+            {['Desktop · chrome / ipad / iphone', 'Real iOS · Simulator (full-page)', 'Figma · design vs live region', 'Auto → S3 → results'].map((f) => (
               <span
                 key={f}
                 className={`rounded-full px-3 py-1 text-xs font-medium ${isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-600 ring-1 ring-gray-200'}`}

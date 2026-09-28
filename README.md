@@ -2,6 +2,26 @@
 
 Run npm install && npm run dev to start.
 
+## Run Console
+
+`/console` dispatches and live-tracks the screenshot-diff workflows. Four run
+kinds: **Viewport diff** (a dataset), **⚡ Quick run** (pasted URLs),
+**🎨 Figma compare** (one page region vs one Figma frame) and
+**Real iOS · Simulator**. It needs the `server/` backend running — see
+[LAB.md](./LAB.md) for setup, the workflow dispatch fields and the results
+contract.
+
+Results are viewed at `/imagediff/<site>` (latest) or
+`/imagediff/<site>?run=<runId>` (one specific run). Published results are pruned
+upstream: dataset runs keep the newest 3 for up to 7 days, and quick / Figma runs
+last 24 hours.
+
+### Backend tests
+
+```bash
+node --test server/*.test.js
+```
+
 ## AI Judge
 
 The "🤖 AI Judge" button in the screenshot-diff viewer asks a vision model

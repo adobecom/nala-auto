@@ -42,6 +42,16 @@ const server = http.createServer(async (req, res) => {
         sites: [...BUILTIN_SITES, ...getCustomSites().filter((s) => !BUILTIN_SITES.includes(s))],
         customSites: getCustomSites(),
         shards: ['chrome', 'ipad', 'iphone'],
+        // Human names for the three viewport shards, used by the Figma compare
+        // picker where one frame maps to exactly one of them.
+        viewportLabels: { chrome: 'Desktop', ipad: 'Tablet', iphone: 'Mobile' },
+        // Published results are pruned upstream — surface the limits so the
+        // console never implies long-term archival.
+        retention: {
+          datasetKeepRuns: 3,
+          datasetMaxDays: 7,
+          oneOffMaxHours: 24,
+        },
         // Latest 2 iPhone + 2 iPad models (all ship with Xcode 16.2 — no install).
         iosDevices: ['iPhone 16 Pro Max', 'iPhone 16 Pro', 'iPhone 16', 'iPad Pro 11-inch (M4)', 'iPad Air 11-inch (M2)'],
         // Minimum iOS a device model can run — a model has no simulator build for
@@ -122,7 +132,13 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {
         return send(res, 400, { error: String(e.message || e) });
       }
-      return send(res, 200, { runId: run.id, mode: run.mode, site: run.site, resultsUrl: run.resultsUrl });
+      return send(res, 200, {
+        runId: run.id,
+        mode: run.mode,
+        site: run.site,
+        resultsUrl: run.resultsUrl,
+        latestResultsUrl: run.latestResultsUrl,
+      });
     }
 
     if (p === '/lab/manual-ios/session' && req.method === 'POST') {

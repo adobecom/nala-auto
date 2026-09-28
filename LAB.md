@@ -4,6 +4,10 @@ Turns nala-auto from a **results dashboard** into a **BrowserStack-style console
 site + candidate, click **Run**, and watch the `screenshot-diff-nala-parallel.yml` GitHub Actions
 workflow dispatch and stream its parallel shards live — then jump straight to the results.
 
+Four run kinds share that one pipeline: **Viewport diff** (a dataset), **⚡ Quick run**
+(pasted URLs), **🎨 Figma compare** (one page region vs one Figma frame) and
+**Real iOS · Simulator**.
+
 Today it drives the **existing** workflow (self-hosted macOS runners → S3 → `/imagediff/{site}`).
 The UI already shows the **v2** slot for a real iOS Simulator version matrix (see roadmap below).
 
@@ -13,6 +17,8 @@ The UI already shows the **v2** slot for a real iOS Simulator version matrix (se
 |------|------|
 | `server/` | Thin Node backend (only dep: `ws`). Holds the GitHub token, dispatches + polls the workflow, streams status over WebSocket. Namespaced under `/lab`. |
 | `src/pages/RunConsolePage.jsx` | The `/console` page: site picker, candidate input, Run button, live job grid. |
+| `server/figmaCompare.js` | Validation for the Figma compare run kind (page URL, Figma file key + node-id, CSS selector, single viewport). |
+| `server/resultPaths.js` | Where a run's results live — the per-run vs "latest" path/URL contract (mirrored in `src/lib/resultPaths.js`). |
 | `vite.config.js` | Adds a `/lab` → `localhost:4000` proxy (with `ws: true`). |
 | `ios-runner/` | v2 real-iOS engine: Appium capture (`run.mjs`), sim-matrix helper (`simulators.sh`), site→URL seam (`site-urls.mjs`), and the `run-nala-ios.yml` workflow template. |
 
@@ -49,11 +55,12 @@ npm start
 - Fine-grained PAT on the repo → **Actions: Read and write** (Metadata: Read is automatic).
 - Classic PAT → `repo` + `workflow`.
 
-**Env vars** (all optional except the token): `GH_OWNER`, `GH_REPO`, `GH_WORKFLOW`, `GH_REF`,
+**Env vars** (all optional except the token): `GH_OWNER`, `GH_REPO`, `GH_WORKFLOW`,
+`GH_IOS_WORKFLOW`, `GH_FIGMA_WORKFLOW` (defaults to `GH_WORKFLOW`), `GH_REF`,
 `LAB_PORT` (default 4000), `NALA_AUTO_BASE` (default `http://nala-auto.corp.adobe.com`).
 
 ### How LIVE works
-1. `POST /lab/runs` → `POST /actions/workflows/{wf}/dispatches` with `{ site, milo_libs }`.
+1. `POST /lab/runs` → `POST /actions/workflows/{wf}/dispatches` with `{ run_id, site, milo_libs }`.
 2. Dispatch returns `204` with no run id, so the backend polls
    `/actions/workflows/{wf}/runs?event=workflow_dispatch` and picks the run created just after.
    *Caveat:* if several dispatches fire within the same few seconds it may attach to the wrong one —
@@ -67,6 +74,7 @@ npm start
 | GET | `/lab/config` | mode, repo/workflow, site list, shards, defaults |
 | POST | `/lab/runs` | `{ site, milolibs }` → `{ runId, mode, site, resultsUrl }` |
 | POST | `/lab/runs` (quick) | `{ kind: 'quick', urls, viewports, milolibs }` → same; `400 { error }` on a bad list |
+| POST | `/lab/runs` (figma) | `{ kind: 'figma', urls, figmaUrl, selector, viewports: [one] }` → same; `400 { error }` on bad input |
 | GET | `/lab/runs/:id` | current snapshot |
 | WS | `/lab/stream?runId=` | live `{ kind: 'update', ... }` snapshots |
 
@@ -82,6 +90,68 @@ never overwrites a real dataset's results and every run keeps a stable link
 (`/imagediff/quick-<runId>`). It dispatches the same screenshot workflow with
 `site=custom`, `custom_site=quick-<runId>` and the `urls` / `viewports` inputs,
 which the runner reads as `URLS` in place of the site's sheet.
+
+### Figma compare
+
+**🎨 Figma compare** (Run Console, or the button on Home) diffs **one** live page
+region against **one** Figma frame. Four inputs, all required:
+
+| Input | Notes |
+|-------|-------|
+| Web page URL | The live page to capture. `http(s)` only. |
+| Figma design/prototype URL | A `/design`, `/file` or `/proto` link carrying both a file key and a `node-id`. In Figma: select the frame → right-click → **Copy link to selection**. |
+| CSS selector | Identifies the DOM region on the page that corresponds to the Figma node. Only that element is captured and diffed — not the whole page. Single line, ≤200 chars. |
+| Viewport | Exactly **one** of Desktop (`chrome`) / Tablet (`ipad`) / Mobile (`iphone`). A Figma frame is drawn at a single width, so diffing it against several viewports would compare against the wrong layout. |
+
+Everything is validated live in the console and re-validated server-side
+(`server/figmaCompare.js`), so a bad paste is rejected instantly with a `400`
+rather than minutes later on a runner. Figma writes node ids as `1-23` in URLs
+but `1:23` in its REST API — the parser normalises to the API form and also
+forwards the original URL.
+
+Like a quick run, each Figma run publishes to its own one-off dataset,
+`figma-<runId>`, and is viewed through the existing `/imagediff/<site>` — there
+is no separate result viewer. Dispatch fields:
+
+```
+run_id      = <runId>
+site        = custom
+custom_site = figma-<runId>
+milo_libs   = <candidate query>
+urls        = <the single web page URL>
+viewports   = <one of chrome|ipad|iphone>
+figma_url   = <the full Figma URL>
+selector    = <the CSS selector>
+```
+
+> `site` is a workflow `choice` input restricted to the built-in dataset names,
+> so a one-off name can't be passed there — it rides `custom_site`, exactly as
+> quick runs do.
+
+By default this dispatches the existing screenshot workflow; point it at a
+dedicated file with `GH_FIGMA_WORKFLOW` if milo splits it out.
+
+## Keeping more than the latest result
+
+Every dispatch now carries a `run_id` input. Milo publishes each completed run
+twice — an immutable per-run copy under `screenshots/<site>/runs/<runId>/` and a
+"latest" alias at `screenshots/<site>/` — so a dataset keeps several outputs
+instead of only the most recent.
+
+The viewer route is unchanged: `/imagediff/<site>` still means **latest**, and
+`/imagediff/<site>?run=<runId>` pins it to one run. **Recent runs** in the console
+link to the pinned URL. If a pinned run is gone the viewer falls back to latest
+and says so, rather than rendering nothing.
+
+**Retention** (pruned upstream — this is not an archive):
+
+| What | Kept |
+|------|------|
+| Dataset runs | newest **3**, up to **7 days** |
+| Quick and Figma runs | **24 hours** |
+
+`server/resultPaths.js` and `src/lib/resultPaths.js` hold this contract; keep the
+two in sync.
 
 ## v2 — real iOS Simulator matrix (scaffolded)
 

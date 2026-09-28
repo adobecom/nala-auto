@@ -9,6 +9,10 @@ function cfg() {
     repo: process.env.GH_REPO || 'milo',
     workflow: process.env.GH_WORKFLOW || 'screenshot-diff-nala-parallel.yml',
     iosWorkflow: process.env.GH_IOS_WORKFLOW || 'run-nala-ios.yml',
+    // Figma compare rides the screenshot workflow by default (same one-off
+    // dataset seam, plus figma_url/selector inputs). Point it at a dedicated
+    // workflow file with GH_FIGMA_WORKFLOW if milo ever splits it out.
+    figmaWorkflow: process.env.GH_FIGMA_WORKFLOW || process.env.GH_WORKFLOW || 'screenshot-diff-nala-parallel.yml',
     ref: process.env.GH_REF || 'main',
     token: process.env.GITHUB_TOKEN || '',
   };
@@ -20,13 +24,22 @@ export function isLive() {
 
 export function config() {
   const c = cfg();
-  return { owner: c.owner, repo: c.repo, workflow: c.workflow, iosWorkflow: c.iosWorkflow, ref: c.ref };
+  return {
+    owner: c.owner,
+    repo: c.repo,
+    workflow: c.workflow,
+    iosWorkflow: c.iosWorkflow,
+    figmaWorkflow: c.figmaWorkflow,
+    ref: c.ref,
+  };
 }
 
 // Which workflow file backs a given run kind.
 export function workflowFor(kind) {
   const c = cfg();
-  return kind === 'ios' ? c.iosWorkflow : c.workflow;
+  if (kind === 'ios') return c.iosWorkflow;
+  if (kind === 'figma') return c.figmaWorkflow;
+  return c.workflow;
 }
 
 async function gh(path, opts = {}) {

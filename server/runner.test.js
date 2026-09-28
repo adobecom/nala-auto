@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 process.env.RUNS_STATE_FILE = path.join(os.tmpdir(), `nala-runs-test-${process.pid}.json`);
-const { parseQuickUrls, inputsFor, QUICK_MAX_URLS } = await import('./runner.js');
+const { parseQuickUrls, inputsFor, createRun, QUICK_MAX_URLS } = await import('./runner.js');
 
 test('parses plain URLs and A | B pairs, skipping blanks and comments', () => {
   assert.deepEqual(
@@ -47,4 +47,81 @@ test('dataset runs keep their original dispatch shape', () => {
   assert.deepEqual(inputsFor({ kind: 'screenshot', site: 'bacom', milolibs: '?milolibs=stage' }), {
     site: 'bacom', milo_libs: '?milolibs=stage',
   });
+});
+
+test('every run kind dispatches its own run_id so results are published per run', () => {
+  assert.equal(inputsFor({ kind: 'screenshot', id: 'ab12cd34', site: 'bacom', milolibs: '' }).run_id, 'ab12cd34');
+  assert.equal(
+    inputsFor({ kind: 'quick', id: 'ab12cd34', site: 'quick-ab12cd34', milolibs: '', urls: ['https://a.com'], viewports: ['chrome'] }).run_id,
+    'ab12cd34',
+  );
+  assert.equal(
+    inputsFor({
+      kind: 'ios', id: 'ab12cd34', site: 'bacom', milolibs: '',
+      iosVersions: ['18.3'], devices: ['iPhone 16'], maxUrls: 0,
+    }).run_id,
+    'ab12cd34',
+  );
+});
+
+test('run_id is omitted rather than sent as undefined when a run has no id', () => {
+  const inputs = inputsFor({ kind: 'screenshot', site: 'bacom', milolibs: '?milolibs=stage' });
+  assert.ok(!('run_id' in inputs));
+});
+
+test('figma runs dispatch one URL, one viewport and the figma inputs', () => {
+  assert.deepEqual(
+    inputsFor({
+      kind: 'figma',
+      id: 'ab12cd34',
+      site: 'figma-ab12cd34',
+      milolibs: '?milolibs=stage',
+      urls: ['https://business.adobe.com/x.html'],
+      viewports: ['chrome'],
+      figmaUrl: 'https://www.figma.com/design/AbCdEf123456/Marquee?node-id=12-345',
+      selector: '.marquee.split',
+    }),
+    {
+      run_id: 'ab12cd34',
+      site: 'custom',
+      custom_site: 'figma-ab12cd34',
+      milo_libs: '?milolibs=stage',
+      urls: 'https://business.adobe.com/x.html',
+      viewports: 'chrome',
+      figma_url: 'https://www.figma.com/design/AbCdEf123456/Marquee?node-id=12-345',
+      selector: '.marquee.split',
+    },
+  );
+});
+
+test('a figma run gets its own one-off dataset and a run-pinned results URL', () => {
+  const run = createRun({
+    kind: 'figma',
+    urls: 'https://business.adobe.com/x.html',
+    figmaUrl: 'https://www.figma.com/design/AbCdEf123456/Marquee?node-id=12-345',
+    selector: '.marquee.split',
+    viewports: ['ipad'],
+  });
+  assert.equal(run.site, `figma-${run.id}`);
+  assert.deepEqual(run.viewports, ['ipad']);
+  assert.deepEqual(run.urls, ['https://business.adobe.com/x.html']);
+  // node-id is normalised to the `1:23` form Figma's REST API expects.
+  assert.equal(run.figmaNodeId, '12:345');
+  assert.equal(run.figmaFileKey, 'AbCdEf123456');
+  assert.ok(run.resultsUrl.endsWith(`/imagediff/figma-${run.id}?run=${run.id}`));
+  assert.ok(run.latestResultsUrl.endsWith(`/imagediff/figma-${run.id}`));
+});
+
+test('createRun rejects an invalid figma request before dispatching', () => {
+  const ok = {
+    kind: 'figma',
+    urls: 'https://business.adobe.com/x.html',
+    figmaUrl: 'https://www.figma.com/design/AbCdEf123456/Marquee?node-id=12-345',
+    selector: '.marquee.split',
+    viewports: ['chrome'],
+  };
+  assert.throws(() => createRun({ ...ok, urls: 'business.adobe.com/x' }), /Not a valid web page URL/);
+  assert.throws(() => createRun({ ...ok, selector: '   ' }), /CSS selector/);
+  assert.throws(() => createRun({ ...ok, viewports: ['chrome', 'ipad'] }), /exactly one viewport/);
+  assert.throws(() => createRun({ ...ok, viewports: [] }), /exactly one viewport/);
 });

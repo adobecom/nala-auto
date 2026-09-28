@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import ImageDiff from '../components/ImageDiff';
 import Header from '../components/Header';
+import { resultsPath, RUN_QUERY_PARAM } from '../lib/resultPaths';
 
-async function getData(directory, onProgress) {
+async function getData(path, onProgress) {
   try {
-    const res = await fetch(`/api/milo/screenshots/${directory}/results.json`, { cache: 'no-store' });
-    if (!res.ok) return {};
+    const res = await fetch(`/api/milo/screenshots/${path}/results.json`, { cache: 'no-store' });
+    if (!res.ok) return null;
 
     const total = parseInt(res.headers.get('content-length') || '0', 10);
     const reader = res.body.getReader();
@@ -32,13 +33,13 @@ async function getData(directory, onProgress) {
 
     return JSON.parse(text);
   } catch {
-    return {};
+    return null;
   }
 }
 
-async function getTimestamp(directory) {
+async function getTimestamp(path) {
   try {
-    const res = await fetch(`/api/milo/screenshots/${directory}/timestamp.json`, { cache: 'no-store' });
+    const res = await fetch(`/api/milo/screenshots/${path}/timestamp.json`, { cache: 'no-store' });
     return await res.json();
   } catch {
     return '';
@@ -47,8 +48,13 @@ async function getTimestamp(directory) {
 
 const ImageDiffPage = () => {
   const { directory } = useParams();
+  const [searchParams] = useSearchParams();
+  const runId = searchParams.get(RUN_QUERY_PARAM);
   const [data, setData] = useState({});
   const [timestamp, setTimestamp] = useState('');
+  // True when ?run= was asked for but only the "latest" copy exists — the
+  // per-run copy has either been pruned or was never published.
+  const [runMissing, setRunMissing] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeMenu, setActiveMenu] = useState('MILOCORE');
   const [progress, setProgress] = useState(0); // 0-100, null = done
@@ -64,17 +70,27 @@ const ImageDiffPage = () => {
     const fetchData = async () => {
       setLoading(true);
       setProgress(0);
-      const [data, timestamp] = await Promise.all([
-        getData(directory, setProgress),
-        getTimestamp(directory),
-      ]);
-      setData(data);
-      setTimestamp(timestamp);
+      setRunMissing(false);
+
+      // Prefer the pinned run, but fall back to latest so a pruned or
+      // not-yet-published run still renders something useful.
+      let path = resultsPath(directory, runId);
+      let data = await getData(path, setProgress);
+      let missing = false;
+      if (!data && runId) {
+        missing = true;
+        path = resultsPath(directory);
+        data = await getData(path, setProgress);
+      }
+
+      setRunMissing(missing);
+      setData(data || {});
+      setTimestamp(await getTimestamp(path));
       setProgress(100);
       setLoading(false);
     };
     fetchData();
-  }, [directory]);
+  }, [directory, runId]);
 
   const handleThemeToggle = () => {
     setIsDarkMode(!isDarkMode);
@@ -109,7 +125,15 @@ const ImageDiffPage = () => {
           </div>
         </div>
       ) : (
-        <ImageDiff data={data} timestamp={timestamp} isDarkMode={isDarkMode} />
+        <>
+          {runMissing && (
+            <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+              Run <code>{runId}</code> is no longer available — showing the latest results instead.
+              Dataset runs are kept for up to 7 days (newest 3); quick and Figma runs for 24 hours.
+            </div>
+          )}
+          <ImageDiff data={data} timestamp={timestamp} isDarkMode={isDarkMode} />
+        </>
       )}
     </div>
   );
