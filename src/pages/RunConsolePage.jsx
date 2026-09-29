@@ -710,6 +710,8 @@ const RunConsolePage = () => {
                     <a
                       className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700"
                       href={run.resultsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
                     >
                       View Results ↗
                     </a>

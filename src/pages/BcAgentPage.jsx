@@ -6,26 +6,32 @@ const DEFAULT_URL = 'https://business.stage.adobe.com/?milolibs=stage';
 
 const WORKFLOW_CHECKS = [
   {
+    id: 'recommendation',
     title: 'Product recommendations',
     detail: 'Checks that Brand Concierge recommends relevant Adobe products and renders product links or cards.',
   },
   {
+    id: 'citations',
     title: 'Sources and citations',
     detail: 'Checks that factual answers include sources and citation links.',
   },
   {
+    id: 'comparison',
     title: 'Product comparisons',
     detail: 'Checks that comparison requests render a structured product comparison table.',
   },
   {
+    id: 'sales',
     title: 'Sales and meeting flow',
     detail: 'Checks that sales intent reaches Schedule meeting and the contact form.',
   },
   {
+    id: 'generation',
     title: 'Image generation and quota',
     detail: 'Checks image generation, or Firefly Gallery and Sign in after the two free generations are used.',
   },
   {
+    id: 'feedback',
     title: 'Response feedback',
     detail: 'Checks that assistant responses expose feedback controls.',
   },
@@ -54,6 +60,7 @@ const BcAgentPage = () => {
   const [currentId, setCurrentId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [summary, setSummary] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -80,6 +87,33 @@ const BcAgentPage = () => {
       || runs[0],
     [currentId, runs],
   );
+
+  useEffect(() => {
+    setSummary(null);
+    if (!current?.runId || !current.done) return undefined;
+    let cancelled = false;
+    let attempts = 0;
+    let timer;
+    const load = async () => {
+      attempts += 1;
+      const base = `/api/milo/screenshots/bc-agent/runs/${encodeURIComponent(current.runId)}`;
+      try {
+        const response = await fetch(`${base}/workflow-summary.json`, { cache: 'no-store' });
+        if (!response.ok) throw new Error('not published');
+        const data = await response.json();
+        if (!cancelled) setSummary({ ...data, base });
+      } catch {
+        // S3 publication can trail workflow completion briefly; the GitHub run
+        // remains the fallback while the report becomes available.
+        if (!cancelled && attempts < 10) timer = window.setTimeout(load, 3000);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [current?.runId, current?.done]);
 
   useEffect(() => {
     if (!current?.runId || current.done) return undefined;
@@ -160,18 +194,56 @@ const BcAgentPage = () => {
           <div className="p-5">
             <h2 className={`font-semibold ${text}`}>What this workflow checks</h2>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              {WORKFLOW_CHECKS.map((check) => (
-                <div key={check.title} className="flex items-start gap-3">
-                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white" aria-hidden="true">
-                    ✓
-                  </span>
+              {WORKFLOW_CHECKS.map((check) => {
+                const result = summary?.checks?.find((item) => item.id === check.id);
+                const passed = result?.pass === true;
+                const reviewed = result?.pass === false;
+                const badge = passed
+                  ? 'bg-emerald-500 text-white'
+                  : reviewed
+                    ? 'bg-amber-500 text-white'
+                    : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-500';
+                return (
+                <div key={check.title} className={`rounded-lg p-3 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
+                  <div className="flex items-start gap-3">
+                    <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold ${badge}`} aria-hidden="true">
+                      {passed ? '✓' : reviewed ? '!' : '•'}
+                    </span>
                   <div>
-                    <h3 className={`text-sm font-semibold ${text}`}>{check.title}</h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className={`text-sm font-semibold ${text}`}>{check.title}</h3>
+                      {result && (
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${passed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                          {passed ? 'PASS' : 'REVIEW'}
+                        </span>
+                      )}
+                    </div>
                     <p className={`mt-0.5 text-sm leading-5 ${subtle}`}>{check.detail}</p>
                   </div>
+                  </div>
+                  {result?.screenshot && (
+                    <a
+                      href={`${summary.base}/${encodeURIComponent(result.screenshot)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 block"
+                    >
+                      <img
+                        src={`${summary.base}/${encodeURIComponent(result.screenshot)}`}
+                        alt={`${check.title} evidence`}
+                        className="h-36 w-full rounded-lg border border-gray-200 object-cover object-top dark:border-gray-700"
+                        loading="lazy"
+                      />
+                      <span className="mt-1 block text-xs font-medium text-indigo-600">View screenshot in new tab ↗</span>
+                    </a>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
+            {current?.done && !summary && (
+              <p className={`mt-4 text-xs ${subtle}`}>Publishing check status and screenshots…</p>
+            )}
           </div>
         </section>
 
@@ -219,11 +291,21 @@ const BcAgentPage = () => {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tone(current.conclusion || current.status, isDarkMode)}`}>
-                    {current.conclusion || current.status}
+                    {summary ? `${summary.status.toUpperCase()} ${summary.passed}/${summary.total}` : current.conclusion || current.status}
                   </span>
+                  {summary && (
+                    <a
+                      href={`${summary.base}/report.html`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold text-indigo-600 hover:underline"
+                    >
+                      View full report in new tab ↗
+                    </a>
+                  )}
                   {current.htmlUrl && (
                     <a href={current.htmlUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-indigo-600 hover:underline">
-                      View results in new tab ↗
+                      GitHub run ↗
                     </a>
                   )}
                 </div>
