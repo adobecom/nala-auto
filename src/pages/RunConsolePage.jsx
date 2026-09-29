@@ -713,7 +713,7 @@ const RunConsolePage = () => {
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      View Results ↗
+                      Open Results in New Tab ↗
                     </a>
                   )}
                 </div>
