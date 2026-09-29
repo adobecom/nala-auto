@@ -223,7 +223,7 @@ const BcAgentPage = () => {
                   </span>
                   {current.htmlUrl && (
                     <a href={current.htmlUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-indigo-600 hover:underline">
-                      Open workflow &amp; report artifact ↗
+                      View results in new tab ↗
                     </a>
                   )}
                 </div>
@@ -265,7 +265,9 @@ const BcAgentPage = () => {
                       {run.conclusion || run.status}
                     </span>
                     {run.htmlUrl && (
-                      <a href={run.htmlUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">GitHub ↗</a>
+                      <a href={run.htmlUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
+                        View results ↗
+                      </a>
                     )}
                   </div>
                 </li>
