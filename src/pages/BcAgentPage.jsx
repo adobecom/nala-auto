@@ -5,38 +5,47 @@ import Header from '../components/Header';
 const DEFAULT_URL = 'https://business.stage.adobe.com/?milolibs=stage';
 const reportBase = (runId) => `/api/milo/screenshots/bc-agent/runs/${encodeURIComponent(runId)}`;
 
-const WORKFLOW_CHECKS = [
-  {
-    id: 'recommendation',
-    title: 'Product recommendations',
-    detail: 'Checks that Brand Concierge recommends relevant Adobe products and renders product links or cards.',
-  },
-  {
-    id: 'citations',
-    title: 'Sources and citations',
-    detail: 'Checks that factual answers include sources and citation links.',
-  },
-  {
-    id: 'comparison',
-    title: 'Product comparisons',
-    detail: 'Checks that comparison requests render a structured product comparison table.',
-  },
-  {
-    id: 'sales',
-    title: 'Sales and meeting flow',
-    detail: 'Checks that sales intent reaches Schedule meeting and the contact form.',
-  },
-  {
-    id: 'generation',
-    title: 'Image generation and quota',
-    detail: 'Checks image generation, or Firefly Gallery and Sign in after the two free generations are used.',
-  },
-  {
-    id: 'feedback',
-    title: 'Response feedback',
-    detail: 'Checks that assistant responses expose feedback controls.',
-  },
+// Mirrors tools/bc-agent/lib/monitor.js in Milo (suite "monitor").
+const MONITOR_CHECKS = [
+  { id: 'paa-product', group: 'Product Advisor', title: 'Product knowledge', detail: 'Product questions answer with a product card, cited sources or product links.' },
+  { id: 'paa-compare', group: 'Product Advisor', title: 'Product comparison', detail: 'Comparison questions render a structured comparison table.' },
+  { id: 'pricing', group: 'Product Advisor', title: 'Pricing', detail: 'Pricing questions show a price or link to the plans / pricing page.' },
+  { id: 'acrobat-cta', group: 'Product Advisor', title: 'Acrobat frictionless CTA', detail: 'Acrobat task prompts show a product card whose button opens the matching Acrobat online tool.' },
+  { id: 'genie', group: 'Genie', title: 'How-to help', detail: 'How-to questions answer with Help / Experience League sources or the right download page.' },
+  { id: 'firefly-generate', group: 'Firefly', title: 'Image generation', detail: 'Image prompts generate an image, or show Firefly Gallery + Sign in once free generations are used.' },
+  { id: 'firefly-boards', group: 'Firefly', title: 'Boards discovery', detail: 'Mood board / storyboard intents point to Firefly Boards.' },
+  { id: 'firefly-edit', group: 'Firefly', title: 'Image edit discovery', detail: 'Photo edit intents point to the Firefly image editor.' },
+  { id: 'bam-explicit', group: 'Book a Meeting', title: 'Explicit sales request', detail: 'A direct sales request offers Schedule meeting and opens the meeting form.' },
+  { id: 'bam-implicit', group: 'Book a Meeting', title: 'Implicit sales signal', detail: 'Enterprise pricing / demo questions offer a path to sales.' },
+  { id: 'bam-clarify', group: 'Book a Meeting', title: 'Ambiguous request clarifies', detail: 'A vague "talk to someone" asks which product first, then offers the meeting.' },
+  { id: 'live-chat', group: 'Live Agent', title: 'Live advisor handoff', detail: 'On business.adobe.com, buying at scale connects to a live advisor (the monitor ends the connection).' },
+  { id: 'support-deflect', group: 'Live Agent', title: 'Support requests deflect', detail: 'Billing / account / install problems point to support, not a sales advisor.' },
+  { id: 'out-of-scope', group: 'Guardrails', title: 'Out of scope / jailbreak', detail: 'Off-topic and prompt-injection requests are declined without product widgets.' },
+  { id: 'feedback', group: 'Chat UI', title: 'Response feedback', detail: 'Assistant replies expose thumbs up / down controls.' },
 ];
+
+// Runs published before the monitor suite (suite "explore").
+const LEGACY_CHECKS = [
+  { id: 'recommendation', group: 'Standard workflow', title: 'Product recommendations', detail: 'Recommends relevant Adobe products and renders product links or cards.' },
+  { id: 'citations', group: 'Standard workflow', title: 'Sources and citations', detail: 'Factual answers include sources and citation links.' },
+  { id: 'comparison', group: 'Standard workflow', title: 'Product comparisons', detail: 'Comparison requests render a structured product comparison table.' },
+  { id: 'sales', group: 'Standard workflow', title: 'Sales and meeting flow', detail: 'Sales intent reaches Schedule meeting and the contact form.' },
+  { id: 'generation', group: 'Standard workflow', title: 'Image generation and quota', detail: 'Image generation, or Firefly Gallery and Sign in after the free generations.' },
+  { id: 'feedback', group: 'Standard workflow', title: 'Response feedback', detail: 'Assistant responses expose feedback controls.' },
+];
+
+const STATUS_STYLE = {
+  pass: { icon: '✓', dot: 'bg-emerald-500 text-white', pill: 'bg-emerald-100 text-emerald-800', label: 'PASS' },
+  review: { icon: '!', dot: 'bg-amber-500 text-white', pill: 'bg-amber-100 text-amber-800', label: 'REVIEW' },
+  error: { icon: '×', dot: 'bg-rose-500 text-white', pill: 'bg-rose-100 text-rose-800', label: 'ERROR' },
+  skip: { icon: '–', dot: 'bg-gray-400 text-white', pill: 'bg-gray-100 text-gray-600', label: 'SKIPPED' },
+};
+
+const statusOf = (result) => {
+  if (!result) return null;
+  if (result.status && STATUS_STYLE[result.status]) return result.status;
+  return result.pass ? 'pass' : 'review';
+};
 
 const tone = (value, dark) => {
   if (value === 'success') return dark ? 'bg-emerald-950 text-emerald-300' : 'bg-emerald-100 text-emerald-800';
@@ -189,6 +198,8 @@ const BcAgentPage = () => {
     ? 'bg-gray-800 border-gray-700 text-gray-100'
     : 'bg-white border-gray-300 text-gray-900';
   const running = current && !current.done;
+  const checkList = summary && summary.suite !== 'monitor' ? LEGACY_CHECKS : MONITOR_CHECKS;
+  const checkGroups = [...checkList.reduce((map, check) => map.set(check.group, [...(map.get(check.group) || []), check]), new Map())];
 
   return (
     <div className={`${page} min-h-screen`}>
@@ -204,7 +215,7 @@ const BcAgentPage = () => {
         <div>
           <h1 className={`text-2xl font-bold ${text}`}>Brand Concierge workflow</h1>
           <p className={`mt-1 ${subtle}`}>
-            Dispatches the standard conversation health check to the same self-hosted Mac mini pool as Screenshot Diff.
+            Monitors every Brand Concierge agent on the same self-hosted Mac mini pool as Screenshot Diff.
           </p>
         </div>
 
@@ -212,54 +223,82 @@ const BcAgentPage = () => {
 
         <section className={`rounded-xl border shadow-sm ${card}`}>
           <div className="p-5">
-            <h2 className={`font-semibold ${text}`}>What this workflow checks</h2>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              {WORKFLOW_CHECKS.map((check) => {
-                const result = summary?.checks?.find((item) => item.id === check.id);
-                const passed = result?.pass === true;
-                const reviewed = result?.pass === false;
-                const badge = passed
-                  ? 'bg-emerald-500 text-white'
-                  : reviewed
-                    ? 'bg-amber-500 text-white'
-                    : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-500';
-                return (
-                <div key={check.title} className={`rounded-lg p-3 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
-                  <div className="flex items-start gap-3">
-                    <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold ${badge}`} aria-hidden="true">
-                      {passed ? '✓' : reviewed ? '!' : '•'}
-                    </span>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className={`text-sm font-semibold ${text}`}>{check.title}</h3>
-                      {result && (
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${passed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                          {passed ? 'PASS' : 'REVIEW'}
-                        </span>
-                      )}
-                    </div>
-                    <p className={`mt-0.5 text-sm leading-5 ${subtle}`}>{check.detail}</p>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className={`font-semibold ${text}`}>What the monitor checks</h2>
+              {summary && (
+                <span className={`text-xs ${subtle}`}>
+                  {summary.passed}/{summary.total} passed
+                  {summary.skipped ? ` · ${summary.skipped} skipped` : ''}
+                  {summary.poolSource ? ` · prompt pool: ${summary.poolSource}` : ''}
+                </span>
+              )}
+            </div>
+            <p className={`mt-1 text-sm ${subtle}`}>
+              One short conversation per Brand Concierge agent, judged on routing and rendered widgets, not wording.
+              Prompts rotate through a private pool curated from the M2 golden set; a miss is retried once.
+            </p>
+            {summary?.poolSource === 'example' && (
+              <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                This run used the public example prompts. Set the <code>BC_MONITOR_POOL</code> secret on the Milo repository to rotate through the real pool.
+              </div>
+            )}
+            <div className="mt-4 space-y-5">
+              {checkGroups.map(([group, checks]) => (
+                <div key={group}>
+                  <h3 className={`mb-2 text-xs font-semibold uppercase tracking-wide ${subtle}`}>{group}</h3>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {checks.map((check) => {
+                      const result = summary?.checks?.find((item) => item.id === check.id);
+                      const status = statusOf(result);
+                      const style = STATUS_STYLE[status];
+                      const shot = result?.screenshot ? `${summary.base}/${encodeURIComponent(result.screenshot)}` : null;
+                      return (
+                        <div key={check.id} className={`rounded-lg p-3 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
+                          <div className="flex items-start gap-3">
+                            <span
+                              className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold ${style ? style.dot : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-500'}`}
+                              aria-hidden="true"
+                            >
+                              {style ? style.icon : '•'}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4 className={`text-sm font-semibold ${text}`}>{check.title}</h4>
+                                {style && <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${style.pill}`}>{style.label}</span>}
+                                {result?.flaky && (
+                                  <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-bold text-yellow-800" title="Passed on the retry">FLAKY</span>
+                                )}
+                              </div>
+                              <p className={`mt-0.5 text-sm leading-5 ${subtle}`}>{check.detail}</p>
+                              {result?.observed && (
+                                <p className={`mt-1 text-xs font-medium ${status === 'pass' ? 'text-emerald-600' : status === 'skip' ? subtle : 'text-amber-600'}`}>
+                                  Observed: {result.observed}
+                                </p>
+                              )}
+                              {result?.prompt && (
+                                <p className={`mt-1 truncate text-xs italic ${subtle}`} title={result.prompt}>
+                                  Prompt: “{result.prompt}”
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          {shot && (
+                            <a href={shot} target="_blank" rel="noopener noreferrer" className="mt-3 block">
+                              <img
+                                src={shot}
+                                alt={`${check.title} evidence`}
+                                className={`h-72 w-full rounded-lg border object-contain ${isDarkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}
+                                loading="lazy"
+                              />
+                              <span className="mt-1 block text-xs font-medium text-indigo-600">View screenshot in new tab ↗</span>
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  </div>
-                  {result?.screenshot && (
-                    <a
-                      href={`${summary.base}/${encodeURIComponent(result.screenshot)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 block"
-                    >
-                      <img
-                        src={`${summary.base}/${encodeURIComponent(result.screenshot)}`}
-                        alt={`${check.title} evidence`}
-                        className="h-36 w-full rounded-lg border border-gray-200 object-cover object-top dark:border-gray-700"
-                        loading="lazy"
-                      />
-                      <span className="mt-1 block text-xs font-medium text-indigo-600">View screenshot in new tab ↗</span>
-                    </a>
-                  )}
                 </div>
-                );
-              })}
+              ))}
             </div>
             {current?.done && !summary && (
               <p className={`mt-4 text-xs ${subtle}`}>Publishing check status and screenshots…</p>
@@ -280,12 +319,12 @@ const BcAgentPage = () => {
               />
             </label>
             <div className={`rounded-lg px-4 py-3 text-sm ${isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-50 text-gray-600'}`}>
-              Current accepted behavior: Firefly photo recommendations; sales may go directly to Schedule meeting;
-              after two free generations, Firefly Gallery + Sign in is valid. A run takes about 2–4 minutes.
+              Accepted behavior: sales may go directly to Schedule meeting; after the free generations, Firefly Gallery + Sign in
+              is valid; Live Agent is only expected on business.adobe.com (skipped elsewhere). A run takes about 5 minutes.
             </div>
             <div className="flex items-center justify-between gap-3">
               <span className={`text-xs ${subtle}`}>
-                GitHub workflow → self-hosted macOS runner → report artifact (7-day retention)
+                GitHub workflow → self-hosted macOS runner → internal S3 report
               </span>
               <button
                 onClick={start}
@@ -343,8 +382,8 @@ const BcAgentPage = () => {
               </div>
               {current.done && (
                 <p className={`text-xs ${subtle}`}>
-                  The workflow uploads <code>workflow-summary.md</code>, JSON, the full HTML report and screenshots
-                  as artifact <code>bc-agent-{current.runId}</code>.
+                  The full report, transcripts and screenshots are published to internal S3 only; the public GitHub run
+                  shows check ids and statuses, never prompts.
                 </p>
               )}
             </div>
