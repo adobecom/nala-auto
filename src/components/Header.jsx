@@ -1,269 +1,160 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { fetchCustomDatasets, CUSTOM_DATASETS_EVENT } from '../lib/customDatasets';
-import { SITE_GROUPS as menuData } from '../lib/sites';
+import { SITE_GROUPS } from '../lib/sites';
 
+const PAGES = [
+  { title: 'Dashboard', url: '/', type: 'Page' },
+  { title: 'Run console', url: '/console', type: 'Workflow' },
+  { title: 'Quick run', url: '/console?mode=quick', type: 'Workflow' },
+  { title: 'Figma compare', url: '/console?mode=figma', type: 'Workflow' },
+  { title: 'BC workflow', url: '/bc-agent', type: 'Workflow' },
+  { title: 'Manual iOS Safari', url: '/manual-ios', type: 'Workflow' },
+];
 
-const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [hoveredMenu, setHoveredMenu] = useState(null);
-  const menuRef = useRef(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
+// Navigation lives in the AppShell sidebar; the top bar is search + theme only.
+const Header = ({ isDarkMode, handleThemeToggle }) => {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
   const [customDatasets, setCustomDatasets] = useState([]);
+  const searchRef = useRef(null);
+  const inputRef = useRef(null);
 
-  // Custom datasets (added via the Home page "+ Add dataset" button) are
-  // persisted server-side (shared across everyone) — keep this nav in sync.
   useEffect(() => {
     const refresh = () => fetchCustomDatasets().then(setCustomDatasets);
     refresh();
     window.addEventListener(CUSTOM_DATASETS_EVENT, refresh);
-    window.addEventListener('focus', refresh);
-    return () => {
-      window.removeEventListener(CUSTOM_DATASETS_EVENT, refresh);
-      window.removeEventListener('focus', refresh);
-    };
+    return () => window.removeEventListener(CUSTOM_DATASETS_EVENT, refresh);
   }, []);
 
-  const displayMenuData = useMemo(
-    () => (customDatasets.length ? { ...menuData, CUSTOM: customDatasets } : menuData),
-    [customDatasets],
-  );
+  const entries = useMemo(() => {
+    const groups = customDatasets.length ? { ...SITE_GROUPS, CUSTOM: customDatasets } : SITE_GROUPS;
+    const sites = Object.entries(groups).flatMap(([group, items]) =>
+      items.map((site) => ({ title: site, url: `/imagediff/${site}`, type: group })));
+    return [...PAGES, ...sites];
+  }, [customDatasets]);
 
-  const searchData = useMemo(
-    () =>
-      Object.values(displayMenuData)
-        .flat()
-        .map((item) => ({ title: item, url: `/imagediff/${item}`, type: 'page' })),
-    [displayMenuData],
-  );
-  const searchRef = useRef(null);
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return entries.filter((entry) => entry.title.toLowerCase().includes(q)).slice(0, 8);
+  }, [entries, query]);
+
+  useEffect(() => setHighlight(0), [query]);
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setHoveredMenu(null);
+    const onClick = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) setOpen(false);
+    };
+    const onKey = (event) => {
+      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+      if (event.key === '/' && !typing) {
+        event.preventDefault();
+        inputRef.current?.focus();
       }
     };
-
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
     };
   }, []);
 
-  const handleMenuClick = (menu) => {
-    if (activeMenu === menu) {
-      setHoveredMenu(hoveredMenu === menu ? null : menu);
-    } else {
-      setActiveMenu(menu);
-      setHoveredMenu(menu);
+  const go = (entry) => {
+    setOpen(false);
+    setQuery('');
+    inputRef.current?.blur();
+    navigate(entry.url);
+  };
+
+  const onInputKey = (event) => {
+    if (!results.length) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setHighlight((value) => (value + 1) % results.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setHighlight((value) => (value - 1 + results.length) % results.length);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      go(results[highlight]);
+    } else if (event.key === 'Escape') {
+      setOpen(false);
     }
   };
 
-  const renderMenuItem = (item) => {
-    return (
-      <Link
-        key={item}
-        to={`/imagediff/${item}`}
-        className={`px-4 py-2 text-sm group flex items-center gap-2 transition-colors duration-150 ${
-          isDarkMode ? 'text-gray-200 hover:bg-gray-700/60' : 'text-gray-700 hover:bg-gray-50'
-        }`}
-        onClick={(e) => {
-          e.stopPropagation();
-          setHoveredMenu(null);
-          setIsMenuOpen(false);
-        }}
-      >
-        <svg className="w-4 h-4 text-gray-400 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        <span className="group-hover:translate-x-1 transition-transform">{item}</span>
-      </Link>
-    );
-  };
-
-  const handleSearch = (query) => {
-    setSearchQuery(query);
-    if (query.trim() === '') {
-      setSearchResults([]);
-      return;
-    }
-
-    const filtered = searchData.filter(item =>
-      item.title.toLowerCase().includes(query.toLowerCase())
-    );
-    setSearchResults(filtered);
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (searchRef.current && !searchRef.current.contains(event.target)) {
-        setIsSearching(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  const searchBar = (
-    <div ref={searchRef} className="relative flex-1 max-w-xl mx-4">
-      <div className="relative">
-        <input
-          type="text"
-          placeholder="Search..."
-          value={searchQuery}
-          onChange={(e) => handleSearch(e.target.value)}
-          onFocus={() => setIsSearching(true)}
-          className={`w-full px-4 py-2 rounded-lg border ${
-            isDarkMode 
-              ? 'bg-gray-800 border-gray-700 text-white' 
-              : 'bg-white border-gray-200 text-gray-900'
-          } focus:outline-none focus:ring-2 focus:ring-primary`}
-        />
-        <svg
-          className={`absolute right-3 top-2.5 w-5 h-5 ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-500'
-          }`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          />
-        </svg>
-      </div>
-
-      {isSearching && searchResults.length > 0 && (
-        <div className={`absolute mt-2 w-full rounded-lg shadow-lg ${
-          isDarkMode ? 'bg-gray-800' : 'bg-white'
-        } ring-1 ring-black ring-opacity-5 z-50`}>
-          <div className="py-1">
-            {searchResults.map((result) => (
-              <Link
-                key={result.title}
-                to={result.url}
-                onClick={() => {
-                  setIsSearching(false);
-                  setSearchQuery('');
-                }}
-                className={`block px-4 py-2 text-sm ${
-                  isDarkMode 
-                    ? 'text-gray-200 hover:bg-gray-700' 
-                    : 'text-gray-700 hover:bg-gray-50'
-                } transition-colors duration-150`}
-              >
-                {result.title}
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  const bar = isDarkMode ? 'bg-gray-950/90 border-gray-800' : 'bg-white/90 border-gray-200';
+  const input = isDarkMode
+    ? 'bg-gray-900 border-gray-800 text-gray-100 placeholder-gray-500'
+    : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400';
 
   return (
-    <nav
-      className={`px-4 py-2.5 sticky top-0 z-50 border-b backdrop-blur supports-[backdrop-filter]:bg-opacity-90 ${
-        isDarkMode ? 'bg-gray-950/95 border-gray-800' : 'bg-white/95 border-gray-200'
-      }`}
-    >
-      <div className="container mx-auto flex justify-between items-center">
+    <nav className={`sticky top-0 z-50 border-b px-4 py-2.5 backdrop-blur ${bar}`}>
+      <div className="flex items-center gap-3">
         <Link
           to="/"
-          className={`flex items-center gap-2 text-lg font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
+          className={`flex items-center gap-2 font-bold tracking-tight md:hidden ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500 to-sky-500 text-sm text-white">
-            N
-          </span>
-          Auto Tests Dashboard
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500 to-sky-500 text-sm text-white">N</span>
         </Link>
 
-        <div className="hidden md:block flex-1 max-w-xl mx-4">
-          {searchBar}
-        </div>
+        <div ref={searchRef} className="relative w-full max-w-md">
+          <svg className={`pointer-events-none absolute left-3 top-2.5 h-4 w-4 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Jump to a site or workflow…"
+            value={query}
+            onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={onInputKey}
+            aria-label="Search sites and workflows"
+            className={`w-full rounded-lg border py-2 pl-9 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${input}`}
+          />
+          <kbd className={`pointer-events-none absolute right-2.5 top-2 rounded border px-1.5 text-[11px] ${isDarkMode ? 'border-gray-700 text-gray-500' : 'border-gray-300 text-gray-400'}`}>/</kbd>
 
-        <div className="md:hidden">
-          <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className={isDarkMode ? 'text-white' : 'text-gray-900'}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-        </div>
-
-        <div
-          ref={menuRef}
-          className={`md:flex ${isMenuOpen ? 'block' : 'hidden'} absolute md:relative top-16 md:top-0 left-0 right-0 md:right-auto border-b md:border-0 ${
-            isDarkMode ? 'bg-gray-950 border-gray-800' : 'bg-white border-gray-200'
-          } md:bg-transparent`}
-        >
-          <ul className="md:flex items-center space-y-1 md:space-y-0 md:space-x-1 p-3 md:p-0">
-            {Object.keys(displayMenuData).map((menu) => (
-              <li key={menu} className="relative group">
-                <button
-                  className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-all duration-150 flex items-center gap-1.5 ${
-                    activeMenu === menu
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : isDarkMode
-                        ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
-                  onClick={() => handleMenuClick(menu)}
-                >
-                  <span>{menu}</span>
-                  <svg
-                    className={`w-3.5 h-3.5 transition-transform duration-200 ${hoveredMenu === menu ? 'rotate-180' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+          {open && results.length > 0 && (
+            <ul className={`absolute z-50 mt-2 w-full overflow-hidden rounded-lg py-1 shadow-lg ring-1 ${isDarkMode ? 'bg-gray-900 ring-gray-800' : 'bg-white ring-black/5'}`}>
+              {results.map((entry, index) => (
+                <li key={entry.url}>
+                  <button
+                    type="button"
+                    onMouseEnter={() => setHighlight(index)}
+                    onClick={() => go(entry)}
+                    className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${
+                      index === highlight
+                        ? isDarkMode ? 'bg-gray-800 text-white' : 'bg-indigo-50 text-indigo-900'
+                        : isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                    }`}
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-
-                <div
-                  className={`
-                  ${hoveredMenu === menu ? 'block opacity-100 translate-y-0' : 'hidden opacity-0 -translate-y-2'}
-                  absolute left-0 mt-2 w-56 rounded-lg shadow-lg ring-1 z-50 transform transition-all duration-200
-                  ${isDarkMode ? 'bg-gray-800 ring-gray-700' : 'bg-white ring-black ring-opacity-5'}
-                `}
-                >
-                  <div className="py-1 rounded-lg overflow-hidden">
-                    {displayMenuData[menu].map((item) => renderMenuItem(item))}
-                  </div>
-                </div>
-              </li>
-            ))}
-            <li className="md:ml-2">
-              <label
-                className={`flex cursor-pointer gap-2 items-center rounded-full px-2.5 py-1.5 ${
-                  isDarkMode ? 'bg-gray-800 text-amber-300' : 'bg-gray-100 text-gray-500'
-                }`}
-                title="Toggle dark mode"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
-                <input type="checkbox" value="dark" className="toggle toggle-sm theme-controller" onChange={handleThemeToggle} checked={isDarkMode}/>
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-              </label>
-            </li>
-          </ul>
+                    <span>{entry.title}</span>
+                    <span className={`text-[11px] uppercase tracking-wide ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{entry.type}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
-        <div className="md:hidden block w-full mt-4">
-          {isMenuOpen && searchBar}
-        </div>
+        <button
+          type="button"
+          onClick={handleThemeToggle}
+          className={`ml-auto flex h-9 w-9 items-center justify-center rounded-lg transition ${isDarkMode ? 'bg-gray-900 text-amber-300 hover:bg-gray-800' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {isDarkMode ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" /></svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+          )}
+        </button>
       </div>
     </nav>
   );
@@ -273,7 +164,7 @@ Header.propTypes = {
   isDarkMode: PropTypes.bool.isRequired,
   handleThemeToggle: PropTypes.func.isRequired,
   activeMenu: PropTypes.string,
-  setActiveMenu: PropTypes.func
+  setActiveMenu: PropTypes.func,
 };
 
-export default Header; 
+export default Header;

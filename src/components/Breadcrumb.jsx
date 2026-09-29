@@ -1,40 +1,26 @@
-import { Link } from "react-router-dom";
-import PropTypes from "prop-types";
-import { useNavigate } from "react-router-dom";
+import { Link } from 'react-router-dom';
+import PropTypes from 'prop-types';
 
-const Breadcrumb = ({ items, isDarkMode, activeMenu }) => {
-  const navigate = useNavigate();
-
-  const handleMenuClick = () => {
-    navigate("/"); // Call the parent handler with current menu
-  };
+// activeMenu is accepted for backwards compatibility but no longer shown:
+// the sidebar already indicates where you are.
+const Breadcrumb = ({ items, isDarkMode }) => {
+  const muted = isDarkMode ? 'text-gray-500' : 'text-gray-400';
+  const link = isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900';
+  const current = isDarkMode ? 'text-gray-200' : 'text-gray-800';
   return (
-    <div className="text-sm breadcrumbs p-4">
-      <ul className={`${isDarkMode ? "text-white" : "text-black"}`}>
-        <li>
-          <Link to="/">Home</Link>
-        </li>
-        {activeMenu && (
-          <li>
-            <button
-              onClick={handleMenuClick}
-              className="hover:text-primary transition-colors"
-            >
-              {activeMenu}
-            </button>
-          </li>
-        )}
+    <nav aria-label="Breadcrumb" className="px-6 pt-4 text-sm">
+      <ol className="flex flex-wrap items-center gap-1.5">
+        <li><Link to="/" className={link}>Home</Link></li>
         {items.map((item, index) => (
-          <li key={index}>
-            {item.link ? (
-              <Link to={item.link}>{item.label}</Link>
-            ) : (
-              <span>{item.label}</span>
-            )}
+          <li key={`${item.label}-${index}`} className="flex items-center gap-1.5">
+            <span className={muted} aria-hidden="true">/</span>
+            {item.link
+              ? <Link to={item.link} className={link}>{item.label}</Link>
+              : <span className={`font-medium ${current}`} aria-current="page">{item.label}</span>}
           </li>
         ))}
-      </ul>
-    </div>
+      </ol>
+    </nav>
   );
 };
 
@@ -43,11 +29,10 @@ Breadcrumb.propTypes = {
     PropTypes.shape({
       label: PropTypes.string.isRequired,
       link: PropTypes.string,
-    })
+    }),
   ).isRequired,
   isDarkMode: PropTypes.bool.isRequired,
   activeMenu: PropTypes.string,
-  onMenuClick: PropTypes.func,
 };
 
 export default Breadcrumb;

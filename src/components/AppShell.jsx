@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { fetchCustomDatasets, CUSTOM_DATASETS_EVENT } from '../lib/customDatasets';
 import { SITE_GROUPS } from '../lib/sites';
+import { runState, styleFor, useBcSummary, useLabRuns } from '../lib/labRuns';
 
 const WORKFLOWS = [
   { label: 'Dashboard', to: '/', icon: '⌂' },
@@ -11,22 +12,6 @@ const WORKFLOWS = [
   { label: 'BC workflow', to: '/bc-agent', icon: '✦', status: 'bc' },
   { label: 'Manual iOS', to: '/manual-ios', icon: '▯' },
 ];
-
-const DOT = {
-  success: 'bg-emerald-500',
-  pass: 'bg-emerald-500',
-  review: 'bg-amber-500',
-  failure: 'bg-rose-500',
-  error: 'bg-rose-500',
-  cancelled: 'bg-gray-400',
-  running: 'bg-sky-500 animate-pulse',
-};
-
-const runState = (run) => {
-  if (!run) return null;
-  if (!run.done) return 'running';
-  return run.conclusion || run.status;
-};
 
 const isActive = (location, to) => {
   const [path, query = ''] = to.split('?');
@@ -41,8 +26,6 @@ const AppShell = () => {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('navCollapsed') === '1');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark');
-  const [latest, setLatest] = useState({});
-  const [bcStatus, setBcStatus] = useState(null);
   const [customDatasets, setCustomDatasets] = useState([]);
   const [openGroups, setOpenGroups] = useState(() => {
     const site = location.pathname.match(/^\/imagediff\/([^/]+)/)?.[1];
@@ -72,43 +55,13 @@ const AppShell = () => {
     return () => window.removeEventListener(CUSTOM_DATASETS_EVENT, refresh);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const response = await fetch('/lab/runs', { cache: 'no-store' });
-        if (!response.ok) return;
-        const runs = await response.json();
-        if (cancelled || !Array.isArray(runs)) return;
-        setLatest({
-          bc: runs.find((run) => run.runKind === 'bc'),
-          screenshot: runs.find((run) => run.runKind !== 'bc'),
-        });
-      } catch {
-        // Status dots are informational; navigation must keep working.
-      }
-    };
-    load();
-    const timer = window.setInterval(load, 20000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  const bcRunId = latest.bc?.done ? latest.bc.runId : null;
-  useEffect(() => {
-    setBcStatus(null);
-    if (!bcRunId) return undefined;
-    let cancelled = false;
-    fetch(`/api/milo/screenshots/bc-agent/runs/${encodeURIComponent(bcRunId)}/workflow-summary.json`, { cache: 'no-store' })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((summary) => {
-        if (!cancelled && summary?.status) setBcStatus(summary);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [bcRunId]);
+  const { runs } = useLabRuns();
+  const latest = useMemo(() => ({
+    bc: runs.find((run) => run.runKind === 'bc'),
+    screenshot: runs.find((run) => run.runKind !== 'bc'),
+  }), [runs]);
+  const bcStatus = useBcSummary(latest.bc);
+  const bcRunId = latest.bc?.runId;
 
   const statusFor = (kind) => {
     if (kind === 'bc' && bcStatus && latest.bc?.done) {
@@ -158,13 +111,13 @@ const AppShell = () => {
                 <span className="relative w-4 text-center" aria-hidden="true">
                   {entry.icon}
                   {compact && status && (
-                    <span className={`absolute -right-1.5 -top-1 h-2 w-2 rounded-full ${DOT[status.state] || 'bg-gray-400'}`} />
+                    <span className={`absolute -right-1.5 -top-1 h-2 w-2 rounded-full ${styleFor(status.state).dot}`} />
                   )}
                 </span>
                 {!compact && <span className="flex-1 truncate">{entry.label}</span>}
                 {!compact && status && (
                   <span
-                    className={`h-2.5 w-2.5 shrink-0 rounded-full ring-2 ${active ? 'ring-white/40' : 'ring-transparent'} ${DOT[status.state] || 'bg-gray-400'}`}
+                    className={`h-2.5 w-2.5 shrink-0 rounded-full ring-2 ${active ? 'ring-white/40' : 'ring-transparent'} ${styleFor(status.state).dot}`}
                     title={status.title}
                     aria-label={status.title}
                   />
