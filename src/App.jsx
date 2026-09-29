@@ -5,10 +5,10 @@ import {
 } from "react-router-dom";
 import ImageDiffPage from './pages/ImageDiffPage'
 import HomePage from './pages/Home';
-import JsonViewerPage from './pages/JsonViewerPage';
 import RunConsolePage from './pages/RunConsolePage';
 import ManualIOSPage from './pages/ManualIOSPage';
 import BcAgentPage from './pages/BcAgentPage';
+import AppShell from './components/AppShell';
 
 function App() {
 
@@ -16,12 +16,13 @@ function App() {
     <>
       <Router>
         <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/console" element={<RunConsolePage />} />
-          <Route path="/manual-ios" element={<ManualIOSPage />} />
-          <Route path="/bc-agent" element={<BcAgentPage />} />
-          <Route path="/imagediff/:directory" element={<ImageDiffPage />} />
-          <Route path="/json-viewer/:grayboxType" element={<JsonViewerPage />} />
+          <Route element={<AppShell />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/console" element={<RunConsolePage />} />
+            <Route path="/manual-ios" element={<ManualIOSPage />} />
+            <Route path="/bc-agent" element={<BcAgentPage />} />
+            <Route path="/imagediff/:directory" element={<ImageDiffPage />} />
+          </Route>
         </Routes>
     </Router>
     </>

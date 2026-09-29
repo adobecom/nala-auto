@@ -1,17 +1,11 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { fetchCustomDatasets, CUSTOM_DATASETS_EVENT } from '../lib/customDatasets';
+import { SITE_GROUPS as menuData } from '../lib/sites';
 
-const menuData = {
-  MILOCORE: ['milo', 'caas', 'uar', 'feds'],
-  CONSUMER: ['sot', 'homepage', 'dc', 'cc', 'bacom', 'bacom-blog', 'express'],
-  GRAYBOX: ['graybox-homepage', 'graybox-dc', 'graybox-cc', 'graybox-bacom', 'graybox-feds'],
-  DA: ['da-homepage', 'da-dc', 'da-cc', 'da-bacom', 'da-bacom-blog', 'da-feds']
-};
 
 const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) => {
-  const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [hoveredMenu, setHoveredMenu] = useState(null);
   const menuRef = useRef(null);
@@ -69,67 +63,7 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
     }
   };
 
-  const handleJsonView = (item, e) => {
-    e.stopPropagation();
-    setHoveredMenu(null);
-    setIsMenuOpen(false);
-    navigate(`/json-viewer/${item}`);
-    window.location.reload();
-  };
-
-  const renderMenuItem = (item, menu) => {
-    if (menu === 'GRAYBOX') {
-      return (
-        <div
-          key={item}
-          className={`py-2 border-b last:border-b-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-100'}`}
-        >
-          {/* Item name as a header */}
-          <div className={`px-4 py-1 text-xs ${isDarkMode ? 'bg-gray-900 text-gray-400' : 'bg-gray-50 text-gray-500'}`}>
-            {item}
-          </div>
-          <div className="flex">
-            {/* Screen Diff Link - Left Column */}
-            <div
-              className={`flex-1 border-r transition-colors duration-150 ${
-                isDarkMode ? 'border-gray-700 hover:bg-gray-700/60' : 'border-gray-100 hover:bg-gray-50'
-              }`}
-            >
-              <Link
-                to={`/imagediff/${item}`}
-                className={`px-4 py-2 text-sm font-medium hover:text-primary flex items-center gap-2 group ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                }`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setHoveredMenu(null);
-                  setIsMenuOpen(false);
-                }}
-              >
-                <svg className="w-4 h-4 text-gray-400 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span className="group-hover:translate-x-1 transition-transform">Screen Diff</span>
-              </Link>
-            </div>
-
-            {/* JSON Viewer Link - Right Column */}
-            <div className={`flex-1 transition-colors duration-150 ${isDarkMode ? 'hover:bg-gray-700/60' : 'hover:bg-gray-50'}`}>
-              <button
-                onClick={(e) => handleJsonView(item, e)}
-                className={`px-4 py-2 text-sm flex items-center gap-2 group w-full ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
-              >
-                <svg className="w-4 h-4 text-gray-400 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                </svg>
-                <span className="group-hover:translate-x-1 transition-transform">JSON View</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
+  const renderMenuItem = (item) => {
     return (
       <Link
         key={item}
@@ -307,7 +241,7 @@ const Header = ({ isDarkMode, handleThemeToggle, activeMenu, setActiveMenu }) =>
                 `}
                 >
                   <div className="py-1 rounded-lg overflow-hidden">
-                    {displayMenuData[menu].map((item) => renderMenuItem(item, menu))}
+                    {displayMenuData[menu].map((item) => renderMenuItem(item))}
                   </div>
                 </div>
               </li>
