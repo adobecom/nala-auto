@@ -4,6 +4,33 @@ import Header from '../components/Header';
 
 const DEFAULT_URL = 'https://business.stage.adobe.com/?milolibs=stage';
 
+const WORKFLOW_CHECKS = [
+  {
+    title: 'Product recommendations',
+    detail: 'Checks that Brand Concierge recommends relevant Adobe products and renders product links or cards.',
+  },
+  {
+    title: 'Sources and citations',
+    detail: 'Checks that factual answers include sources and citation links.',
+  },
+  {
+    title: 'Product comparisons',
+    detail: 'Checks that comparison requests render a structured product comparison table.',
+  },
+  {
+    title: 'Sales and meeting flow',
+    detail: 'Checks that sales intent reaches Schedule meeting and the contact form.',
+  },
+  {
+    title: 'Image generation and quota',
+    detail: 'Checks image generation, or Firefly Gallery and Sign in after the two free generations are used.',
+  },
+  {
+    title: 'Response feedback',
+    detail: 'Checks that assistant responses expose feedback controls.',
+  },
+];
+
 const tone = (value, dark) => {
   if (value === 'success') return dark ? 'bg-emerald-950 text-emerald-300' : 'bg-emerald-100 text-emerald-800';
   if (value === 'failure' || value === 'error') return dark ? 'bg-rose-950 text-rose-300' : 'bg-rose-100 text-rose-800';
@@ -124,11 +151,29 @@ const BcAgentPage = () => {
           <h1 className={`text-2xl font-bold ${text}`}>Brand Concierge workflow</h1>
           <p className={`mt-1 ${subtle}`}>
             Dispatches the standard conversation health check to the same self-hosted Mac mini pool as Screenshot Diff.
-            The runner explores recommendations, citations, comparisons, image-generation quota behavior and meeting flows.
           </p>
         </div>
 
         {error && <div className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</div>}
+
+        <section className={`rounded-xl border shadow-sm ${card}`}>
+          <div className="p-5">
+            <h2 className={`font-semibold ${text}`}>What this workflow checks</h2>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              {WORKFLOW_CHECKS.map((check) => (
+                <div key={check.title} className="flex items-start gap-3">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white" aria-hidden="true">
+                    ✓
+                  </span>
+                  <div>
+                    <h3 className={`text-sm font-semibold ${text}`}>{check.title}</h3>
+                    <p className={`mt-0.5 text-sm leading-5 ${subtle}`}>{check.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
         <section className={`rounded-xl border shadow-sm ${card}`}>
           <div className="space-y-4 p-5">
