@@ -3,6 +3,7 @@ import Breadcrumb from '../components/Breadcrumb';
 import Header from '../components/Header';
 
 const DEFAULT_URL = 'https://business.stage.adobe.com/?milolibs=stage';
+const reportBase = (runId) => `/api/milo/screenshots/bc-agent/runs/${encodeURIComponent(runId)}`;
 
 const WORKFLOW_CHECKS = [
   {
@@ -61,6 +62,8 @@ const BcAgentPage = () => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [summary, setSummary] = useState(null);
+  const [publishedRuns, setPublishedRuns] = useState([]);
+  const [reportIndexError, setReportIndexError] = useState('');
 
   const refresh = useCallback(async () => {
     try {
@@ -71,6 +74,23 @@ const BcAgentPage = () => {
     } catch (requestError) {
       setError(requestError.message);
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadReports = async () => {
+      try {
+        const response = await fetch('/api/milo/screenshots/bc-agent/runs/index.json', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Report index unavailable (${response.status}).`);
+        const entries = await response.json();
+        if (!Array.isArray(entries)) throw new Error('Invalid report index.');
+        if (!cancelled) setPublishedRuns(entries.map((entry) => entry.runId));
+      } catch (requestError) {
+        if (!cancelled) setReportIndexError(requestError.message);
+      }
+    };
+    loadReports();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -96,7 +116,7 @@ const BcAgentPage = () => {
     let timer;
     const load = async () => {
       attempts += 1;
-      const base = `/api/milo/screenshots/bc-agent/runs/${encodeURIComponent(current.runId)}`;
+      const base = reportBase(current.runId);
       try {
         const response = await fetch(`${base}/workflow-summary.json`, { cache: 'no-store' });
         if (!response.ok) throw new Error('not published');
@@ -335,6 +355,7 @@ const BcAgentPage = () => {
           <div className="p-5">
             <h2 className={`mb-3 font-semibold ${text}`}>Recent runs</h2>
             {!runs.length && <p className={`text-sm ${subtle}`}>No Brand Concierge workflow runs yet.</p>}
+            {reportIndexError && <p className="text-sm text-rose-600">{reportIndexError} Published report links may be unavailable.</p>}
             <ul className="divide-y divide-gray-200 dark:divide-gray-800">
               {runs.map((run) => (
                 <li key={run.runId} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
@@ -346,9 +367,14 @@ const BcAgentPage = () => {
                     <span className={`rounded px-2 py-0.5 text-xs ${tone(run.conclusion || run.status, isDarkMode)}`}>
                       {run.conclusion || run.status}
                     </span>
+                    {(publishedRuns.includes(run.runId) || (summary?.runId === run.runId && summary?.base)) && (
+                      <a href={`${reportBase(run.runId)}/report.html`} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
+                        View results ↗
+                      </a>
+                    )}
                     {run.htmlUrl && (
                       <a href={run.htmlUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
-                        View results ↗
+                        GitHub run ↗
                       </a>
                     )}
                   </div>
