@@ -55,3 +55,11 @@ server falls back to fetching the whole pages from S3.
 > Screenshots are fetched from internal storage and forwarded to whichever
 > endpoint you configure. Confirm that egress is acceptable before pointing
 > this at a third-party or self-hosted model.
+## Brand Concierge agent
+
+**💬 BC workflow** (`/bc-agent`) accepts any HTTP(S) page containing Brand
+Concierge and dispatches `brand-concierge-agent.yml` through the same GitHub
+Actions + self-hosted Mac mini path as Screenshot Diff. The workflow runs the
+standard conversation health check and uploads a shareable Markdown/JSON
+summary, full HTML transcript and screenshots as a seven-day artifact. See
+[LAB.md](LAB.md#brand-concierge-workflow).

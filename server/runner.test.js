@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 process.env.RUNS_STATE_FILE = path.join(os.tmpdir(), `nala-runs-test-${process.pid}.json`);
-const { parseQuickUrls, inputsFor, createRun, QUICK_MAX_URLS } = await import('./runner.js');
+const { parseQuickUrls, parseBcUrl, inputsFor, createRun, QUICK_MAX_URLS } = await import('./runner.js');
 
 test('parses plain URLs and A | B pairs, skipping blanks and comments', () => {
   assert.deepEqual(
@@ -67,6 +67,30 @@ test('every run kind dispatches its own run_id so results are published per run'
 test('run_id is omitted rather than sent as undefined when a run has no id', () => {
   const inputs = inputsFor({ kind: 'screenshot', site: 'bacom', milolibs: '?milolibs=stage' });
   assert.ok(!('run_id' in inputs));
+});
+
+test('BC runs dispatch the standard workflow with an arbitrary http(s) URL', () => {
+  assert.deepEqual(inputsFor({
+    kind: 'bc',
+    id: 'ab12cd34',
+    urls: ['https://business.stage.adobe.com/?milolibs=my-branch'],
+  }), {
+    run_id: 'ab12cd34',
+    url: 'https://business.stage.adobe.com/?milolibs=my-branch',
+  });
+  assert.equal(parseBcUrl('https://example.com/path'), 'https://example.com/path');
+  assert.throws(() => parseBcUrl('file:///tmp/page.html'), /http or https/);
+  assert.throws(() => parseBcUrl('not-a-url'), /valid/);
+});
+
+test('a BC run uses the shared tracked-run lifecycle without image-diff URLs', () => {
+  const run = createRun({ kind: 'bc', url: 'https://business.stage.adobe.com/?milolibs=stage' });
+  assert.equal(run.kind, 'bc');
+  assert.equal(run.site, 'business.stage.adobe.com');
+  assert.deepEqual(run.urls, ['https://business.stage.adobe.com/?milolibs=stage']);
+  assert.equal(run.resultsUrl, null);
+  assert.equal(run.latestResultsUrl, null);
+  assert.equal(run.jobs[0]?.name, 'brand-concierge-agent');
 });
 
 test('figma runs dispatch one URL, one viewport and the figma inputs', () => {

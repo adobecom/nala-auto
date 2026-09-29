@@ -1,5 +1,6 @@
 // Minimal GitHub Actions REST client for the nala-auto run console.
 // Holds the token server-side only; the frontend never sees it.
+/* global process */
 const API = 'https://api.github.com';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -9,6 +10,7 @@ function cfg() {
     repo: process.env.GH_REPO || 'milo',
     workflow: process.env.GH_WORKFLOW || 'screenshot-diff-nala-parallel.yml',
     iosWorkflow: process.env.GH_IOS_WORKFLOW || 'run-nala-ios.yml',
+    bcWorkflow: process.env.GH_BC_WORKFLOW || 'brand-concierge-agent.yml',
     // Figma compare rides the screenshot workflow by default (same one-off
     // dataset seam, plus figma_url/selector inputs). Point it at a dedicated
     // workflow file with GH_FIGMA_WORKFLOW if milo ever splits it out.
@@ -29,6 +31,7 @@ export function config() {
     repo: c.repo,
     workflow: c.workflow,
     iosWorkflow: c.iosWorkflow,
+    bcWorkflow: c.bcWorkflow,
     figmaWorkflow: c.figmaWorkflow,
     ref: c.ref,
   };
@@ -39,6 +42,7 @@ export function workflowFor(kind) {
   const c = cfg();
   if (kind === 'ios') return c.iosWorkflow;
   if (kind === 'figma') return c.figmaWorkflow;
+  if (kind === 'bc') return c.bcWorkflow;
   return c.workflow;
 }
 

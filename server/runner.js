@@ -1,12 +1,14 @@
-// Run store + driver. Supports four run kinds:
+// Run store + driver. Supports five run kinds:
 //   - 'screenshot' → the existing screenshot-diff-nala-parallel.yml (chrome/ipad/iphone shards)
 //   - 'quick'      → same workflow on an ad-hoc URL list, published as its own
 //                    one-off dataset (quick-<runId>) so it never touches a real one
 //   - 'figma'      → one web URL vs one Figma node, scoped to one CSS selector and
 //                    one viewport, published as its own dataset (figma-<runId>)
 //   - 'ios'        → run-nala-ios.yml (one job per selected iOS Simulator version)
+//   - 'bc'         → brand-concierge-agent.yml (standard conversational workflow)
 // LIVE mode dispatches the real workflow and polls its jobs; MOCK mode
 // simulates the same lifecycle so the UI is fully demoable with no token.
+/* global process */
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -51,6 +53,19 @@ export function parseQuickUrls(text) {
     throw new Error(`Quick run is capped at ${QUICK_MAX_URLS} URLs (got ${lines.length}) — add a dataset for bigger lists.`);
   }
   return lines;
+}
+
+export function parseBcUrl(value) {
+  let url;
+  try {
+    url = new URL(String(value || '').trim());
+  } catch {
+    throw new Error('Enter a valid Brand Concierge page URL.');
+  }
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('Brand Concierge URL must use http or https.');
+  }
+  return url.href;
 }
 
 function persist() {
@@ -117,10 +132,16 @@ function makeRun(f) {
 }
 
 export function createRun(body = {}) {
-  const kind = ['ios', 'quick', 'figma'].includes(body.kind) ? body.kind : 'screenshot';
+  const kind = ['ios', 'quick', 'figma', 'bc'].includes(body.kind) ? body.kind : 'screenshot';
   // Throws on a bad list/URL/selector; index.js turns that into a 400.
   const figma = kind === 'figma' ? parseFigmaRun(body, VIEWPORTS) : null;
-  const urls = kind === 'quick' ? parseQuickUrls(body.urls) : figma ? [figma.webUrl] : undefined;
+  const urls = kind === 'quick'
+    ? parseQuickUrls(body.urls)
+    : figma
+      ? [figma.webUrl]
+      : kind === 'bc'
+        ? [parseBcUrl(body.url)]
+        : undefined;
   const picked = Array.isArray(body.viewports) ? VIEWPORTS.filter((v) => body.viewports.includes(v)) : [];
   if (kind === 'quick' && !picked.length) throw new Error('Pick at least one viewport.');
   const viewports = kind === 'quick' ? picked : figma ? [figma.viewport] : undefined;
@@ -134,8 +155,13 @@ export function createRun(body = {}) {
   const id = randomUUID().slice(0, 8);
   // One-off kinds publish to their own dataset so they never overwrite a real
   // site's results and each run keeps a stable /imagediff/<site> link.
-  const site =
-    kind === 'quick' ? `quick-${id}` : kind === 'figma' ? `figma-${id}` : (body.site || 'bacom').trim();
+  const site = kind === 'quick'
+    ? `quick-${id}`
+    : kind === 'figma'
+      ? `figma-${id}`
+      : kind === 'bc'
+        ? new URL(urls[0]).host
+        : (body.site || 'bacom').trim();
   const live = gh.isLive();
 
   const runnablePairs = devices.flatMap((d) => iosVersions.filter((v) => pairRunnable(d, v)).map((v) => ({ d, v })));
@@ -144,7 +170,9 @@ export function createRun(body = {}) {
     kind === 'ios'
       ? runnablePairs.flatMap(({ d, v }) =>
           Array.from({ length: shards }, (_, s) => mkJob(`${d} · iOS ${v} · shard ${s + 1}/${shards}`)))
-      : (viewports || VIEWPORTS).map(mkJob);
+      : kind === 'bc'
+        ? [mkJob('brand-concierge-agent')]
+        : (viewports || VIEWPORTS).map(mkJob);
 
   const run = makeRun({
     id,
@@ -171,8 +199,8 @@ export function createRun(body = {}) {
     jobs: live ? [] : mockJobs,
     // Pin the link to this run's immutable output so a dataset's older results
     // stay reachable after the next run overwrites "latest".
-    resultsUrl: resultsUrl(NALA_BASE, site, id),
-    latestResultsUrl: resultsUrl(NALA_BASE, site),
+    resultsUrl: kind === 'bc' ? null : resultsUrl(NALA_BASE, site, id),
+    latestResultsUrl: kind === 'bc' ? null : resultsUrl(NALA_BASE, site),
     done: false,
   });
 
@@ -247,6 +275,12 @@ export function inputsFor(run) {
       devices: run.devices.join(','),
       max_urls: String(run.maxUrls || 0),
       max_parallel: String(IOS_RUNNERS),
+    };
+  }
+  if (run.kind === 'bc') {
+    return {
+      ...runId,
+      url: run.urls[0],
     };
   }
   if (run.kind === 'quick') {

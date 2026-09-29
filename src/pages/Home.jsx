@@ -200,6 +200,13 @@ const HomePage = () => {
               📱 Manual iOS Safari
             </a>
             <a
+              href="/bc-agent"
+              className={`rounded-lg px-4 py-2.5 text-sm font-semibold ${isDarkMode ? 'bg-gray-800 text-sky-300 hover:bg-gray-700' : 'bg-white text-sky-700 ring-1 ring-sky-200 hover:bg-sky-50'}`}
+              title="Chat with Brand Concierge like a user and check which workflows it reaches"
+            >
+              💬 BC workflow
+            </a>
+            <a
               href={DATA_URL}
               target="_blank"
               rel="noopener noreferrer"

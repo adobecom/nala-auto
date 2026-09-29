@@ -75,6 +75,7 @@ npm start
 | POST | `/lab/runs` | `{ site, milolibs }` → `{ runId, mode, site, resultsUrl }` |
 | POST | `/lab/runs` (quick) | `{ kind: 'quick', urls, viewports, milolibs }` → same; `400 { error }` on a bad list |
 | POST | `/lab/runs` (figma) | `{ kind: 'figma', urls, figmaUrl, selector, viewports: [one] }` → same; `400 { error }` on bad input |
+| POST | `/lab/runs` (BC) | `{ kind: 'bc', url }` → tracked Brand Concierge workflow run; `400 { error }` on a non-HTTP(S) URL |
 | GET | `/lab/runs/:id` | current snapshot |
 | WS | `/lab/stream?runId=` | live `{ kind: 'update', ... }` snapshots |
 
@@ -130,6 +131,36 @@ selector    = <the CSS selector>
 
 By default this dispatches the existing screenshot workflow; point it at a
 dedicated file with `GH_FIGMA_WORKFLOW` if milo splits it out.
+
+### Brand Concierge workflow
+
+**💬 BC workflow** (`/bc-agent`, button on Home) uses the same execution path
+as Screenshot Diff:
+
+```
+nala-auto POST /lab/runs
+  → workflow_dispatch brand-concierge-agent.yml
+  → [self-hosted, macOS, screendiff] Mac mini
+  → GitHub report artifact + tracked run status
+```
+
+The only required input is an arbitrary HTTP(S) page containing Brand
+Concierge. nala-auto assigns `run_id`, persists the run, locates the GitHub
+Actions run, polls its job and streams updates over `/lab/stream`. The Milo
+workflow owns Playwright installation and the standard test implementation;
+the nala-auto web server does not launch browser processes.
+
+The standard check explores recommendations, citations, comparison tables,
+sales/meeting flows, feedback controls and image-generation quota behavior.
+Current accepted behavior includes Firefly photo recommendations, sales going
+directly to Schedule meeting, and Firefly Gallery + Sign in after two free
+generations. The workflow uploads `workflow-summary.md`,
+`workflow-summary.json`, `report.html`, `report.json` and screenshots as
+artifact `bc-agent-<run_id>` with seven-day retention.
+
+Set `GH_BC_WORKFLOW` to override the default
+`brand-concierge-agent.yml`. Like the screenshot workflow, the dispatch target
+repository/ref comes from `GH_OWNER`, `GH_REPO` and `GH_REF`.
 
 ## Keeping more than the latest result
 
