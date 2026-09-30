@@ -35,9 +35,17 @@ function parseAliases(value = '') {
     .filter(([host, name]) => host && name));
 }
 
+// Labels as shown in the repo's runner settings (runners API needs admin).
+const DEFAULT_ALIASES = {
+  sj1010122072226: 'MacNode03',
+  sj1010122072231: 'MacNode05',
+  sj1010122072234: 'MacNode07',
+  sj1010122072235: 'MacNode08',
+};
+
 const NODE_LABEL = /^macnode\d+$/i;
 
-export function runnerDisplayName(name, labels = [], aliases = parseAliases(process.env.RUNNER_ALIASES)) {
+export function runnerDisplayName(name, labels = [], aliases = { ...DEFAULT_ALIASES, ...parseAliases(process.env.RUNNER_ALIASES) }) {
   if (!name) return name;
   if (aliases[name]) return aliases[name];
   const label = labels.find((value) => NODE_LABEL.test(value));

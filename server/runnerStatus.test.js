@@ -78,9 +78,15 @@ test('sj* hostnames display by their MacNode label or alias', () => {
   assert.equal(runnerDisplayName('MacNode01', ['MacNode01'], {}), 'MacNode01');
   assert.equal(runnerDisplayName('sj1010122072235', [], { sj1010122072235: 'MacNode99' }), 'MacNode99');
   const view = summarize({
-    runners: [{ name: 'sj1010122072226', status: 'online', busy: false, labels: [{ name: 'self-hosted' }, { name: 'MacNode26' }] }],
+    runners: [{ name: 'sj1010122072299', status: 'online', busy: false, labels: [{ name: 'self-hosted' }, { name: 'MacNode26' }] }],
     jobs: [],
   });
   assert.equal(view.runners[0].name, 'MacNode26');
-  assert.equal(view.runners[0].host, 'sj1010122072226');
+  assert.equal(view.runners[0].host, 'sj1010122072299');
+});
+
+test('known sj hosts map to their MacNode labels by default', () => {
+  assert.equal(runnerDisplayName('sj1010122072235'), 'MacNode08');
+  assert.equal(runnerDisplayName('sj1010122072226'), 'MacNode03');
+  assert.equal(normalizeJob({ id: 1, run_id: 1, name: 'j', status: 'completed', runner_name: 'sj1010122072231', labels: [] }).runner, 'MacNode05');
 });

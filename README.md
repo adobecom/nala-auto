@@ -61,7 +61,7 @@ runners that have been silent longer than that.
 Some Mac minis are registered under their hostname (`sj1010122072235`) and carry
 their `MacNodeXX` name as a runner label. With runners-API access the page shows
 that label as the name (hostname underneath). Otherwise set the mapping in the
-backend env: `RUNNER_ALIASES=sj1010122072235=MacNode35,sj1010122072226=MacNode26`.
+backend env (`RUNNER_ALIASES=host=Name,...`); the current four sj hosts are built in (226→MacNode03, 231→MacNode05, 234→MacNode07, 235→MacNode08).
 
 ### Backend tests
 
