@@ -75,12 +75,14 @@ The "🤖 AI Judge" button in the screenshot-diff viewer asks a vision model
 whether a diff is a real regression or harmless noise (carousel frames,
 timestamps, rotating promos, mid-animation states).
 
-No model or key ships with this repo. The backend calls whatever
-OpenAI- or Anthropic-compatible endpoint you configure:
+If the Ask agent's `AI_FOUNDRY_API_KEY` is set, the judge uses it with the AI
+Foundry gateway and its vision model `hosted_vllm/google/gemma-4-26B-A4B-it`
+(override with `AI_JUDGE_MODEL`) — nothing else to configure. Otherwise it calls
+whatever OpenAI- or Anthropic-compatible endpoint you configure:
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `AI_JUDGE_API_KEY` | yes | Its presence is what "configured" means. Endpoints without real auth (e.g. a self-hosted proxy) still need a non-empty placeholder. |
+| `AI_JUDGE_API_KEY` | no* | *Required unless `AI_FOUNDRY_API_KEY` is set. Its presence is what "configured" means. Endpoints without real auth (e.g. a self-hosted proxy) still need a non-empty placeholder. |
 | `AI_JUDGE_PROVIDER` | no | `openai` (default) or `anthropic` — selects the wire format. |
 | `AI_JUDGE_BASE_URL` | no | Override the endpoint, e.g. Azure OpenAI or an OpenAI-compatible proxy. |
 | `AI_JUDGE_MODEL` | no | Defaults to `gpt-4o-mini` / `claude-3-5-haiku-latest`. Must be **vision-capable**. |

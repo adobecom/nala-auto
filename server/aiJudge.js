@@ -5,7 +5,8 @@
 // whatever OpenAI- or Anthropic-compatible vision endpoint the deployer
 // configures via environment variables:
 //
-//   AI_JUDGE_API_KEY     required — presence of this is what "configured" means
+//   AI_JUDGE_API_KEY     dedicated key; if unset, AI_FOUNDRY_API_KEY is used with
+//                         the AI Foundry gateway and its Gemma 4 vision model
 //   AI_JUDGE_PROVIDER     'openai' (default) | 'anthropic'
 //   AI_JUDGE_BASE_URL     override the default provider endpoint (e.g. Azure
 //                         OpenAI, a self-hosted OpenAI-compatible proxy, or
@@ -113,8 +114,34 @@ function parseVerdict(raw) {
   }
 }
 
+// Falls back to the Ask agent's AI Foundry key, using a vision-capable model
+// on that gateway, so one key powers both features.
+const FOUNDRY_BASE_URL = 'https://apigw.infra.adobe.net/ehl/api/v1/ehl/v1';
+const FOUNDRY_VISION_MODEL = 'hosted_vllm/google/gemma-4-26B-A4B-it';
+
+export function judgeConfig(env = process.env) {
+  if (env.AI_JUDGE_API_KEY) {
+    const provider = (env.AI_JUDGE_PROVIDER || 'openai').toLowerCase();
+    return {
+      provider,
+      apiKey: env.AI_JUDGE_API_KEY,
+      baseUrl: env.AI_JUDGE_BASE_URL || (provider === 'anthropic' ? undefined : 'https://api.openai.com/v1'),
+      model: env.AI_JUDGE_MODEL || (provider === 'anthropic' ? 'claude-3-5-haiku-latest' : 'gpt-4o-mini'),
+    };
+  }
+  if (env.AI_FOUNDRY_API_KEY) {
+    return {
+      provider: 'openai',
+      apiKey: env.AI_FOUNDRY_API_KEY,
+      baseUrl: env.AI_JUDGE_BASE_URL || env.AI_FOUNDRY_BASE_URL || FOUNDRY_BASE_URL,
+      model: env.AI_JUDGE_MODEL || FOUNDRY_VISION_MODEL,
+    };
+  }
+  return null;
+}
+
 export function isConfigured() {
-  return Boolean(process.env.AI_JUDGE_API_KEY);
+  return Boolean(judgeConfig());
 }
 
 // { a, b, diff }: S3-relative image paths, same shape as the entries in a
@@ -123,15 +150,13 @@ export function isConfigured() {
 // each { y0, y1, a, b, diff } where the images are PNG data URLs. When present
 // they replace the full-page screenshots — same page, far more legible.
 export async function judgeDiff({ a, b, diff, regions }) {
-  const apiKey = process.env.AI_JUDGE_API_KEY;
-  if (!apiKey) {
-    const err = new Error('AI_JUDGE_API_KEY not set');
+  const cfg = judgeConfig();
+  if (!cfg) {
+    const err = new Error('Neither AI_JUDGE_API_KEY nor AI_FOUNDRY_API_KEY is set');
     err.code = 'NOT_CONFIGURED';
     throw err;
   }
-  const provider = (process.env.AI_JUDGE_PROVIDER || 'openai').toLowerCase();
-  const baseUrl = process.env.AI_JUDGE_BASE_URL || (provider === 'anthropic' ? undefined : 'https://api.openai.com/v1');
-  const model = process.env.AI_JUDGE_MODEL || (provider === 'anthropic' ? 'claude-3-5-haiku-latest' : 'gpt-4o-mini');
+  const { provider, apiKey, baseUrl, model } = cfg;
 
   const crops = (Array.isArray(regions) ? regions : [])
     .map((r) => ({ y0: r.y0, y1: r.y1, a: parseDataUrl(r.a), b: parseDataUrl(r.b), diff: parseDataUrl(r.diff) }))
@@ -163,5 +188,5 @@ export async function judgeDiff({ a, b, diff, regions }) {
     ? await callAnthropic({ baseUrl, apiKey, model, images, prompt })
     : await callOpenAiCompatible({ baseUrl, apiKey, model, images, prompt });
 
-  return { ...parseVerdict(raw), regions: crops.length };
+  return { ...parseVerdict(raw), regions: crops.length, model };
 }

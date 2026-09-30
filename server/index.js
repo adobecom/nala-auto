@@ -117,7 +117,7 @@ const server = http.createServer(async (req, res) => {
       if (!aiJudge.isConfigured()) {
         return send(res, 200, {
           configured: false,
-          message: 'AI judge is not configured: set the AI_JUDGE_API_KEY environment variable (plus optional AI_JUDGE_PROVIDER / AI_JUDGE_BASE_URL / AI_JUDGE_MODEL) and restart the backend. See README.md.',
+          message: 'AI judge is not configured: set AI_FOUNDRY_API_KEY (uses the AI Foundry Gemma vision model) or AI_JUDGE_API_KEY (plus optional AI_JUDGE_PROVIDER / AI_JUDGE_BASE_URL / AI_JUDGE_MODEL) and restart the backend. See README.md.',
         });
       }
       try {
