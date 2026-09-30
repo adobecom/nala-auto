@@ -6,12 +6,12 @@ import { SITE_GROUPS } from '../lib/sites';
 
 const PAGES = [
   { title: 'Dashboard', url: '/', type: 'Page' },
-  { title: 'Run console', url: '/console', type: 'Workflow' },
-  { title: 'Quick run', url: '/console?mode=quick', type: 'Workflow' },
-  { title: 'Figma compare', url: '/console?mode=figma', type: 'Workflow' },
-  { title: 'BC workflow', url: '/bc-agent', type: 'Workflow' },
+  { title: 'Run a dataset (Run console)', url: '/console', type: 'Workflow' },
+  { title: 'Quick URL check', url: '/console?mode=quick', type: 'Workflow' },
+  { title: 'Compare with Figma', url: '/console?mode=figma', type: 'Workflow' },
+  { title: 'BC agent monitor', url: '/bc-agent', type: 'Workflow' },
   { title: 'Manual iOS Safari', url: '/manual-ios', type: 'Workflow' },
-  { title: 'Runners', url: '/runners', type: 'Page' },
+  { title: 'Mac mini runners', url: '/runners', type: 'Page' },
 ];
 
 // Navigation lives in the AppShell sidebar; the top bar is search + theme only.

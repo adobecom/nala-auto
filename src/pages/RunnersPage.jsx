@@ -189,7 +189,12 @@ export default function RunnersPage() {
                     <div>
                       <div className="flex items-center gap-2 font-medium">
                         <span className={`h-2.5 w-2.5 rounded-full ${status.dot}`} />
-                        {runner.name}
+                        <span title={runner.host && runner.host !== runner.name ? `Registered as ${runner.host}` : undefined}>
+                          {runner.name}
+                        </span>
+                        {runner.host && runner.host !== runner.name && (
+                          <span className={`text-xs font-normal ${subtle}`}>{runner.host}</span>
+                        )}
                       </div>
                       <div className="mt-1 flex flex-wrap gap-1">
                         <span className={`rounded px-1.5 py-0.5 text-xs ${status.chip}`}>{status.label}</span>

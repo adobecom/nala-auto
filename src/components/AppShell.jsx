@@ -5,14 +5,34 @@ import { SITE_GROUPS } from '../lib/sites';
 import { runState, styleFor, useBcSummary, useLabRuns } from '../lib/labRuns';
 import AskPanel from './AskPanel';
 
-const WORKFLOWS = [
-  { label: 'Dashboard', to: '/', icon: '⌂' },
-  { label: 'Run console', to: '/console', icon: '▶', status: 'screenshot' },
-  { label: 'Quick run', to: '/console?mode=quick', icon: '⚡' },
-  { label: 'Figma compare', to: '/console?mode=figma', icon: '◧' },
-  { label: 'BC workflow', to: '/bc-agent', icon: '✦', status: 'bc' },
-  { label: 'Manual iOS', to: '/manual-ios', icon: '▯' },
-  { label: 'Runners', to: '/runners', icon: '▣' },
+const SECTIONS = [
+  {
+    title: 'Overview',
+    items: [
+      { label: 'Dashboard', hint: 'Latest runs at a glance', to: '/', icon: '⌂' },
+    ],
+  },
+  {
+    title: 'Screenshot diff',
+    items: [
+      { label: 'Run a dataset', hint: 'Diff a whole site dataset', to: '/console', icon: '▶', status: 'screenshot' },
+      { label: 'Quick URL check', hint: 'Diff a few pasted URLs', to: '/console?mode=quick', icon: '⚡' },
+      { label: 'Compare with Figma', hint: 'Page vs. Figma design', to: '/console?mode=figma', icon: '◧' },
+    ],
+  },
+  {
+    title: 'Brand Concierge',
+    items: [
+      { label: 'BC agent monitor', hint: 'Agent workflow checks', to: '/bc-agent', icon: '✦', status: 'bc' },
+    ],
+  },
+  {
+    title: 'Devices & infra',
+    items: [
+      { label: 'Manual iOS Safari', hint: 'Drive a live iOS simulator', to: '/manual-ios', icon: '▯' },
+      { label: 'Mac mini runners', hint: 'CI runner pool status', to: '/runners', icon: '▣' },
+    ],
+  },
 ];
 
 const isActive = (location, to) => {
@@ -102,37 +122,57 @@ const AppShell = () => {
         </button>
       </div>
 
-      {!compact && <div className={heading}>Workflows</div>}
-      <ul className="space-y-1">
-        {WORKFLOWS.map((entry) => {
-          const active = isActive(location, entry.to);
-          const status = entry.status && statusFor(entry.status);
-          return (
-            <li key={entry.to}>
-              <Link to={entry.to} className={`${item(active)} ${compact ? 'justify-center' : ''}`} title={compact ? entry.label : undefined}>
-                <span className="relative w-4 text-center" aria-hidden="true">
-                  {entry.icon}
-                  {compact && status && (
-                    <span className={`absolute -right-1.5 -top-1 h-2 w-2 rounded-full ${styleFor(status.state).dot}`} />
-                  )}
-                </span>
-                {!compact && <span className="flex-1 truncate">{entry.label}</span>}
-                {!compact && status && (
-                  <span
-                    className={`h-2.5 w-2.5 shrink-0 rounded-full ring-2 ${active ? 'ring-white/40' : 'ring-transparent'} ${styleFor(status.state).dot}`}
-                    title={status.title}
-                    aria-label={status.title}
-                  />
-                )}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      {SECTIONS.map((section, index) => (
+        <div key={section.title}>
+          {compact
+            ? index > 0 && <div className={`mx-2 my-2 border-t ${dark ? 'border-gray-800' : 'border-gray-200'}`} />
+            : <div className={heading}>{section.title}</div>}
+          <ul className="space-y-1">
+            {section.items.map((entry) => {
+              const active = isActive(location, entry.to);
+              const status = entry.status && statusFor(entry.status);
+              return (
+                <li key={entry.to}>
+                  <Link
+                    to={entry.to}
+                    className={`${item(active)} ${compact ? 'justify-center' : ''}`}
+                    title={compact ? `${entry.label} — ${entry.hint}` : entry.hint}
+                  >
+                    <span className="relative w-4 text-center" aria-hidden="true">
+                      {entry.icon}
+                      {compact && status && (
+                        <span className={`absolute -right-1.5 -top-1 h-2 w-2 rounded-full ${styleFor(status.state).dot}`} />
+                      )}
+                    </span>
+                    {!compact && (
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{entry.label}</span>
+                        <span className={`block truncate text-[11px] font-normal ${
+                          active ? 'text-indigo-100' : dark ? 'text-gray-500' : 'text-gray-400'
+                        }`}
+                        >
+                          {entry.hint}
+                        </span>
+                      </span>
+                    )}
+                    {!compact && status && (
+                      <span
+                        className={`h-2.5 w-2.5 shrink-0 rounded-full ring-2 ${active ? 'ring-white/40' : 'ring-transparent'} ${styleFor(status.state).dot}`}
+                        title={status.title}
+                        aria-label={status.title}
+                      />
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
 
       {!compact && (
         <>
-          <div className={heading}>Screenshot diff sites</div>
+          <div className={heading}>Screenshot diff results</div>
           <ul className="space-y-1">
             {Object.entries(groups).map(([group, sites]) => (
               <li key={group}>

@@ -9,6 +9,7 @@
 //      DISCOVERY_DAYS; per-runner counts cover the last WINDOW_HOURS.
 // Completed runs never change, so their jobs are cached for as long as they
 // stay in the window; a refresh only re-fetches runs that are still active.
+/* global process */
 import * as gh from './github.js';
 
 export const WINDOW_HOURS = 24;
@@ -24,6 +25,25 @@ let inflight = null;
 
 const QUEUED = new Set(['queued', 'waiting', 'pending', 'requested']);
 
+// Some Mac minis registered under their DNS hostname (sj1010122072235)
+// but carry their MacNodeXX name as a runner label. Prefer that label; the
+// runners API is needed to see it, so RUNNER_ALIASES ("host=Name,...") can
+// supply the mapping when only job history is available.
+function parseAliases(value = '') {
+  return Object.fromEntries(value.split(',')
+    .map((pair) => pair.split('=').map((part) => part.trim()))
+    .filter(([host, name]) => host && name));
+}
+
+const NODE_LABEL = /^macnode\d+$/i;
+
+export function runnerDisplayName(name, labels = [], aliases = parseAliases(process.env.RUNNER_ALIASES)) {
+  if (!name) return name;
+  if (aliases[name]) return aliases[name];
+  const label = labels.find((value) => NODE_LABEL.test(value));
+  return label && !NODE_LABEL.test(name) ? label.replace(/^macnode/i, 'MacNode') : name;
+}
+
 export function normalizeJob(job) {
   return {
     id: job.id,
@@ -32,7 +52,8 @@ export function normalizeJob(job) {
     workflow: job.workflow_name || '',
     status: job.status,
     conclusion: job.conclusion || null,
-    runner: job.runner_name || null,
+    runner: runnerDisplayName(job.runner_name) || null,
+    runnerHost: job.runner_name || null,
     labels: job.labels || [],
     htmlUrl: job.html_url,
     createdAt: job.created_at || null,
@@ -71,10 +92,13 @@ export function summarize({ runners, runnersError, jobs, now = Date.now() }) {
   let list;
   if (runners) {
     list = runners.map((runner) => {
-      const seen = activity.get(runner.name) || empty;
+      const labelNames = (runner.labels || []).map((label) => label.name);
+      const name = runnerDisplayName(runner.name, labelNames);
+      const seen = activity.get(name) || empty;
       const status = runner.status !== 'online' ? 'offline' : runner.busy || seen.current ? 'busy' : 'idle';
       return {
-        name: runner.name,
+        name,
+        host: runner.name,
         os: runner.os,
         status,
         labels: (runner.labels || []).map((label) => label.name).filter((label) => label !== 'self-hosted'),
@@ -92,6 +116,7 @@ export function summarize({ runners, runnersError, jobs, now = Date.now() }) {
       else if (ts(seen.lastSeen) >= windowStart) status = 'seen';
       return {
         name,
+        host: (seen.current || seen.last)?.runnerHost || name,
         os: null,
         status,
         labels: labels.filter((label) => label !== 'self-hosted'),

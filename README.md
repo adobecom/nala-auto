@@ -58,6 +58,11 @@ Without it, the page still works from job history: it lists runners that ran a
 job in the last 14 days (with "last seen"), but can't show online vs offline or
 runners that have been silent longer than that.
 
+Some Mac minis are registered under their hostname (`sj1010122072235`) and carry
+their `MacNodeXX` name as a runner label. With runners-API access the page shows
+that label as the name (hostname underneath). Otherwise set the mapping in the
+backend env: `RUNNER_ALIASES=sj1010122072235=MacNode35,sj1010122072226=MacNode26`.
+
 ### Backend tests
 
 ```bash

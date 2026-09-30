@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { summarize, normalizeJob } from './runnerStatus.js';
+import { summarize, normalizeJob, runnerDisplayName } from './runnerStatus.js';
 
 const NOW = Date.parse('2025-01-02T12:00:00Z');
 const job = (over) => normalizeJob({
@@ -70,4 +70,17 @@ test('jobs completed before the window do not count toward totals', () => {
   assert.equal(out.runners[0].status, 'quiet');
   assert.equal(out.runners[0].lastSeen, '2024-12-30T00:00:00Z');
   assert.equal(out.totals.quiet, 1);
+});
+
+test('sj* hostnames display by their MacNode label or alias', () => {
+  assert.equal(runnerDisplayName('sj1010122072235', ['self-hosted', 'macnode07'], {}), 'MacNode07');
+  assert.equal(runnerDisplayName('sj1010122072235', ['self-hosted'], {}), 'sj1010122072235');
+  assert.equal(runnerDisplayName('MacNode01', ['MacNode01'], {}), 'MacNode01');
+  assert.equal(runnerDisplayName('sj1010122072235', [], { sj1010122072235: 'MacNode99' }), 'MacNode99');
+  const view = summarize({
+    runners: [{ name: 'sj1010122072226', status: 'online', busy: false, labels: [{ name: 'self-hosted' }, { name: 'MacNode26' }] }],
+    jobs: [],
+  });
+  assert.equal(view.runners[0].name, 'MacNode26');
+  assert.equal(view.runners[0].host, 'sj1010122072226');
 });
