@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { fetchCustomDatasets, CUSTOM_DATASETS_EVENT } from '../lib/customDatasets';
 import { SITE_GROUPS } from '../lib/sites';
 import { runState, styleFor, useBcSummary, useLabRuns } from '../lib/labRuns';
+import AskPanel from './AskPanel';
 
 const WORKFLOWS = [
   { label: 'Dashboard', to: '/', icon: '⌂' },
@@ -195,6 +196,7 @@ const AppShell = () => {
           <Outlet />
         </div>
       </div>
+      <AskPanel />
     </div>
   );
 };

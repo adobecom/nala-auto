@@ -10,6 +10,7 @@ import { getCustomSites, addCustomSite, removeCustomSite } from './customSites.j
 import { BUILTIN_SITES } from './workflowSites.js';
 import { manualSessionConfig, createManualSession, endManualSession } from './manualSessions.js';
 import * as aiJudge from './aiJudge.js';
+import * as askAgent from './askAgent.js';
 
 const PORT = process.env.LAB_PORT || 4000;
 
@@ -75,6 +76,8 @@ const server = http.createServer(async (req, res) => {
         nalaAutoBase: process.env.NALA_AUTO_BASE || 'http://nala-auto.corp.adobe.com',
         manualIos: manualSessionConfig(),
         aiJudgeConfigured: aiJudge.isConfigured(),
+        askAgentConfigured: askAgent.isConfigured(),
+        askAgentModel: askAgent.config().model,
       });
     }
 
@@ -95,6 +98,26 @@ const server = http.createServer(async (req, res) => {
       }
       try {
         const result = await aiJudge.judgeDiff({ a, b, diff, regions });
+        return send(res, 200, { configured: true, ...result });
+      } catch (e) {
+        return send(res, 502, { configured: true, error: String(e.message || e) });
+      }
+    }
+
+    // "Ask" chat panel: a read-only assistant over this console's own data
+    // (recent runs, BC monitor checks, dataset results). Same "not configured
+    // is a 200, not an error" contract as /lab/judge so the panel always
+    // renders and can explain what an admin needs to set. See askAgent.js.
+    if (p === '/lab/ask' && req.method === 'POST') {
+      const { messages } = await readBody(req);
+      if (!askAgent.isConfigured()) {
+        return send(res, 200, {
+          configured: false,
+          message: 'Ask agent is not configured: set the AI_FOUNDRY_API_KEY environment variable (plus optional AI_FOUNDRY_BASE_URL / AI_FOUNDRY_MODEL) and restart the backend. See README.md.',
+        });
+      }
+      try {
+        const result = await askAgent.ask({ messages });
         return send(res, 200, { configured: true, ...result });
       } catch (e) {
         return send(res, 502, { configured: true, error: String(e.message || e) });

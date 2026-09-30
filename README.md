@@ -55,6 +55,39 @@ server falls back to fetching the whole pages from S3.
 > Screenshots are fetched from internal storage and forwarded to whichever
 > endpoint you configure. Confirm that egress is acceptable before pointing
 > this at a third-party or self-hosted model.
+
+## Ask agent
+
+The floating **✦ Ask** button (bottom right, on every page) opens a chat panel
+that answers questions about this console's own data — recent runs, Brand
+Concierge monitor checks and screenshot-diff results.
+
+It is **read-only**: the model can call four tools (`list_runs`,
+`list_datasets`, `get_dataset_results`, `get_bc_monitor`) and nothing else. It
+cannot start, stop or change a run.
+
+The default target is Adobe's internal AI Foundry gateway
+(<https://aifoundry-preview.corp.adobe.com>), which is a plain
+OpenAI-compatible LiteLLM proxy. Generate a personal virtual key (`sk-…`)
+there, then configure the backend:
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `AI_FOUNDRY_API_KEY` | yes | Your AI Foundry virtual key. Its presence is what "configured" means. |
+| `AI_FOUNDRY_BASE_URL` | no | Defaults to `https://apigw.infra.adobe.net/ehl/api/v1/ehl/v1`. Any OpenAI-compatible base URL works. |
+| `AI_FOUNDRY_MODEL` | no | Defaults to `aifoundry/Qwen/Qwen-latest`. `hosted_vllm/google/gemma-4-26B-A4B-it` is cheaper. |
+
+```bash
+AI_FOUNDRY_API_KEY=sk-... node server/index.js
+```
+
+The key lives only on the backend — the browser only ever talks to `/lab/ask`.
+Unconfigured, that route returns a friendly explanation (HTTP 200) rather than
+an error, and the panel still renders and says what to set.
+
+> Questions and the tool results they pull in (run ids, dataset names, BC check
+> outcomes) are sent to the configured model. Keep this pointed at an internal
+> gateway.
 ## Brand Concierge agent
 
 **💬 BC workflow** (`/bc-agent`) accepts any HTTP(S) page containing Brand
