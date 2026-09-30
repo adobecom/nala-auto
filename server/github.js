@@ -100,6 +100,39 @@ export async function getRun(runId) {
   return res.ok ? res.json() : null;
 }
 
+// Self-hosted runners registered on the repo. Needs the token to have
+// "Administration: Read" (fine-grained) or admin on the repo (classic), which
+// the dispatch-only token usually lacks — so report why instead of throwing
+// and let callers fall back to what job history can tell them.
+export async function listRunners() {
+  const c = cfg();
+  const res = await gh(`/repos/${c.owner}/${c.repo}/actions/runners?per_page=100`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { runners: null, error: `${res.status}: ${body.message || res.statusText}` };
+  }
+  const data = await res.json();
+  return { runners: data.runners || [], error: null };
+}
+
+// Repo-wide workflow runs; `query` is a raw query string, e.g. "status=queued".
+export async function listRepoRuns(query) {
+  const c = cfg();
+  const res = await gh(`/repos/${c.owner}/${c.repo}/actions/runs?${query}`);
+  if (!res.ok) throw new Error(`list runs failed (${res.status})`);
+  const data = await res.json();
+  return data.workflow_runs || [];
+}
+
+// Full job objects (runner_name, labels, timestamps) for one run.
+export async function listRunJobs(runId) {
+  const c = cfg();
+  const res = await gh(`/repos/${c.owner}/${c.repo}/actions/runs/${runId}/jobs?per_page=100`);
+  if (!res.ok) throw new Error(`list jobs failed (${res.status})`);
+  const data = await res.json();
+  return data.jobs || [];
+}
+
 export async function getJobs(runId) {
   const c = cfg();
   const res = await gh(`/repos/${c.owner}/${c.repo}/actions/runs/${runId}/jobs`);

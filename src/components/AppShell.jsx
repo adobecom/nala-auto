@@ -12,6 +12,7 @@ const WORKFLOWS = [
   { label: 'Figma compare', to: '/console?mode=figma', icon: '◧' },
   { label: 'BC workflow', to: '/bc-agent', icon: '✦', status: 'bc' },
   { label: 'Manual iOS', to: '/manual-ios', icon: '▯' },
+  { label: 'Runners', to: '/runners', icon: '▣' },
 ];
 
 const isActive = (location, to) => {

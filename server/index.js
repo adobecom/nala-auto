@@ -11,6 +11,7 @@ import { BUILTIN_SITES } from './workflowSites.js';
 import { manualSessionConfig, createManualSession, endManualSession } from './manualSessions.js';
 import * as aiJudge from './aiJudge.js';
 import * as askAgent from './askAgent.js';
+import { getRunnerStatus } from './runnerStatus.js';
 import { getThumbnail, isSafeScreenshotPath, CACHE_CONTROL } from './thumbnails.js';
 
 const PORT = process.env.LAB_PORT || 4000;
@@ -165,6 +166,15 @@ const server = http.createServer(async (req, res) => {
     if (delM && req.method === 'DELETE') {
       removeCustomSite(decodeURIComponent(delM[1]));
       return send(res, 200, { sites: getCustomSites() });
+    }
+
+    // Self-hosted runner fleet (busy/idle/offline, queued jobs, recent jobs).
+    if (p === '/lab/runners' && req.method === 'GET') {
+      try {
+        return send(res, 200, await getRunnerStatus());
+      } catch (e) {
+        return send(res, 502, { error: String(e.message || e) });
+      }
     }
 
     if (p === '/lab/runs' && req.method === 'GET') {

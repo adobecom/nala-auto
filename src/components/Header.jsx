@@ -11,6 +11,7 @@ const PAGES = [
   { title: 'Figma compare', url: '/console?mode=figma', type: 'Workflow' },
   { title: 'BC workflow', url: '/bc-agent', type: 'Workflow' },
   { title: 'Manual iOS Safari', url: '/manual-ios', type: 'Workflow' },
+  { title: 'Runners', url: '/runners', type: 'Page' },
 ];
 
 // Navigation lives in the AppShell sidebar; the top bar is search + theme only.
