@@ -3,7 +3,40 @@ import test from 'node:test';
 import { __test, config, isConfigured } from './askAgent.js';
 /* global process */
 
-const { TOOLS, sanitizeHistory, clip } = __test;
+const { TOOLS, sanitizeHistory, clip, splitFollowUps, fallbackFollowUps } = __test;
+
+test('splitFollowUps strips the trailing line and returns the questions', () => {
+  const { reply, followUps } = splitFollowUps('All 15 checks passed.\n\nFOLLOW_UPS: Were any flaky? | Which run was it? | Show recent runs');
+  assert.equal(reply, 'All 15 checks passed.');
+  assert.deepEqual(followUps, ['Were any flaky?', 'Which run was it?', 'Show recent runs']);
+});
+
+test('splitFollowUps tolerates spelling drift and bullet noise', () => {
+  const { reply, followUps } = splitFollowUps('Answer.\nfollow ups:\n- First question?\n- Second question?');
+  assert.equal(reply, 'Answer.');
+  assert.deepEqual(followUps, ['First question?', 'Second question?']);
+});
+
+test('splitFollowUps leaves a plain answer untouched', () => {
+  const { reply, followUps } = splitFollowUps('  Just an answer.  ');
+  assert.equal(reply, 'Just an answer.');
+  assert.deepEqual(followUps, []);
+});
+
+test('splitFollowUps caps at three and drops junk entries', () => {
+  const { followUps } = splitFollowUps(`x\nFOLLOW_UPS: a | Good question one? | Good question two? | Good question three? | ${'y'.repeat(90)}`);
+  assert.equal(followUps.length, 3);
+  assert.ok(!followUps.includes('a'));
+});
+
+test('fallbackFollowUps derives suggestions from the tools used', () => {
+  assert.deepEqual(fallbackFollowUps([]), []);
+  assert.ok(fallbackFollowUps(['get_bc_monitor']).length);
+  const both = fallbackFollowUps(['list_runs', 'list_runs', 'get_bc_monitor']);
+  assert.equal(both.length, new Set(both).size, 'no duplicates');
+  assert.ok(both.length <= 3);
+  assert.deepEqual(fallbackFollowUps(['nope']), []);
+});
 
 test('isConfigured follows AI_FOUNDRY_API_KEY', () => {
   const saved = process.env.AI_FOUNDRY_API_KEY;

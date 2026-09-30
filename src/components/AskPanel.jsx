@@ -66,6 +66,7 @@ const AskPanel = () => {
     }
   });
   const scroller = useRef(null);
+  const field = useRef(null);
 
   useEffect(() => {
     fetch('/lab/config', { cache: 'no-store' })
@@ -84,6 +85,12 @@ const AskPanel = () => {
   useEffect(() => {
     if (open) scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' });
   }, [messages, open, busy]);
+
+  // Focus on open, and again once a reply lands, so the panel is always ready
+  // for the next question without a click.
+  useEffect(() => {
+    if (open && configured && !busy) field.current?.focus();
+  }, [open, configured, busy]);
 
   const send = useCallback(async (text) => {
     const question = text.trim();
@@ -110,6 +117,7 @@ const AskPanel = () => {
           role: 'assistant',
           content: data.reply || 'The model returned an empty answer — try rephrasing.',
           tools: data.tools || [],
+          followUps: data.followUps || [],
         }]);
       }
     } catch (e) {
@@ -178,7 +186,7 @@ const AskPanel = () => {
               </div>
             )}
             {messages.map((m, i) => (
-              <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+              <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex flex-col items-start gap-1.5'}>
                 <div
                   className={`max-w-[85%] rounded-2xl px-3 py-2 ${
                     m.role === 'user'
@@ -195,6 +203,22 @@ const AskPanel = () => {
                     </p>
                   )}
                 </div>
+                {/* Only the newest answer offers follow-ups — older ones would
+                    re-ask questions the thread has already moved past. */}
+                {i === messages.length - 1 && !busy && m.followUps?.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {m.followUps.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => send(q)}
+                        className="rounded-full border border-gray-300 px-2.5 py-1 text-[11px] text-gray-600 transition hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-700 dark:border-gray-700 dark:text-gray-400 dark:hover:border-indigo-500 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             {busy && <p className="text-xs text-gray-500 dark:text-gray-400">Thinking…</p>}
@@ -205,9 +229,10 @@ const AskPanel = () => {
             className="flex gap-2 border-t border-gray-200 p-3 dark:border-gray-800"
           >
             <input
+              ref={field}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              disabled={!configured || busy}
+              disabled={!configured}
               placeholder={configured ? 'Ask about a run, dataset or BC check…' : 'Unavailable'}
               className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             />

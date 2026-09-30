@@ -178,6 +178,23 @@ async function runTool(name, rawArgs) {
   }
 }
 
+// Small models drop the FOLLOW_UPS line often enough that an empty panel would
+// look broken. Fall back to whatever the tools it just called make sensible.
+const FALLBACKS = {
+  list_runs: ['Which of those failed?', 'Show the latest BC monitor run'],
+  list_datasets: ['What is failing on bacom-live-qa?', 'What ran recently?'],
+  get_dataset_results: ['Which viewport is worst?', 'Has this regressed since the last run?'],
+  get_bc_monitor: ['Which checks need review and why?', 'Were any checks flaky?'],
+};
+
+function fallbackFollowUps(used) {
+  const out = [];
+  [...new Set(used)].forEach((name) => {
+    (FALLBACKS[name] || []).forEach((q) => { if (!out.includes(q)) out.push(q); });
+  });
+  return out.slice(0, 3);
+}
+
 // ---------------------------------------------------------------- chat
 
 const SYSTEM_PROMPT = `You are the Ask agent built into nala-auto, Adobe's internal visual-QA and Brand Concierge monitoring console (http://nala-auto.corp.adobe.com).
@@ -192,7 +209,28 @@ Rules:
 - Use the tools to get real data. Never invent run ids, numbers or results.
 - If a tool errors or returns nothing, say so plainly instead of guessing.
 - Answer in English, concise and concrete. Prefer short prose or a small markdown table over long lists.
-- You are read-only: you cannot start, stop or change runs. If asked, point the user at the Run console or BC workflow page.`;
+- You are read-only: you cannot start, stop or change runs. If asked, point the user at the Run console or BC workflow page.
+
+After your answer, always add one final line in exactly this form:
+
+FOLLOW_UPS: <question> | <question> | <question>
+
+Give two or three short follow-up questions (max ~8 words each) that this console can actually answer from the data — drilling into a specific failing dataset, run or check you just mentioned. Write them as the user would ask them. Never repeat the question you were just asked. This line is stripped before the user sees it, so never refer to it.`;
+
+// The model appends "FOLLOW_UPS: a | b | c" to its answer; split that off so
+// the chat bubble stays clean and the UI can render them as buttons. Small
+// models forget sometimes, hence the callers' static fallback.
+function splitFollowUps(raw) {
+  const text = (raw || '').trim();
+  const match = text.match(/\n*FOLLOW[ _-]?UPS\s*:\s*(.+)$/is);
+  if (!match) return { reply: text, followUps: [] };
+  const followUps = match[1]
+    .split(/\||\n/)
+    .map((s) => s.replace(/^[\s\-*\d.)]+/, '').trim())
+    .filter((s) => s.length > 3 && s.length <= 80)
+    .slice(0, 3);
+  return { reply: text.slice(0, match.index).trim(), followUps };
+}
 
 function sanitizeHistory(messages) {
   return (Array.isArray(messages) ? messages : [])
@@ -262,7 +300,8 @@ export async function ask({ messages }) {
     if (!message) throw new Error('empty response from AI Foundry');
     const calls = message.tool_calls || [];
     if (!calls.length) {
-      return { reply: (message.content || '').trim(), tools: used, model };
+      const { reply, followUps } = splitFollowUps(message.content);
+      return { reply, followUps: followUps.length ? followUps : fallbackFollowUps(used), tools: used, model };
     }
     thread.push({ role: 'assistant', content: message.content || '', tool_calls: calls });
     const results = await Promise.all(calls.map((call) => runTool(call.function?.name, call.function?.arguments)));
@@ -271,7 +310,7 @@ export async function ask({ messages }) {
       thread.push({ role: 'tool', tool_call_id: call.id, name: call.function?.name, content: results[i] });
     });
   }
-  return { reply: '', tools: used, model };
+  return { reply: '', followUps: [], tools: used, model };
 }
 
-export const __test = { TOOLS, sanitizeHistory, clip };
+export const __test = { TOOLS, sanitizeHistory, clip, splitFollowUps, fallbackFollowUps };
