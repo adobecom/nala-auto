@@ -76,7 +76,7 @@ whether a diff is a real regression or harmless noise (carousel frames,
 timestamps, rotating promos, mid-animation states).
 
 If the Ask agent's `AI_FOUNDRY_API_KEY` is set, the judge uses it with the AI
-Foundry gateway and its vision model `hosted_vllm/google/gemma-4-26B-A4B-it`
+Foundry gateway and the vision-capable `aifoundry/Qwen/Qwen-latest` (same model as the Ask agent)
 (override with `AI_JUDGE_MODEL`) — nothing else to configure. Otherwise it calls
 whatever OpenAI- or Anthropic-compatible endpoint you configure:
 

@@ -6,7 +6,7 @@
 // configures via environment variables:
 //
 //   AI_JUDGE_API_KEY     dedicated key; if unset, AI_FOUNDRY_API_KEY is used with
-//                         the AI Foundry gateway and its Gemma 4 vision model
+//                         the AI Foundry gateway and its Qwen-latest (vision) model
 //   AI_JUDGE_PROVIDER     'openai' (default) | 'anthropic'
 //   AI_JUDGE_BASE_URL     override the default provider endpoint (e.g. Azure
 //                         OpenAI, a self-hosted OpenAI-compatible proxy, or
@@ -117,7 +117,7 @@ function parseVerdict(raw) {
 // Falls back to the Ask agent's AI Foundry key, using a vision-capable model
 // on that gateway, so one key powers both features.
 const FOUNDRY_BASE_URL = 'https://apigw.infra.adobe.net/ehl/api/v1/ehl/v1';
-const FOUNDRY_VISION_MODEL = 'hosted_vllm/google/gemma-4-26B-A4B-it';
+const FOUNDRY_VISION_MODEL = 'aifoundry/Qwen/Qwen-latest';
 
 export function judgeConfig(env = process.env) {
   if (env.AI_JUDGE_API_KEY) {
