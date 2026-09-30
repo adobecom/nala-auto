@@ -11,6 +11,7 @@ import { BUILTIN_SITES } from './workflowSites.js';
 import { manualSessionConfig, createManualSession, endManualSession } from './manualSessions.js';
 import * as aiJudge from './aiJudge.js';
 import * as askAgent from './askAgent.js';
+import { getThumbnail, isSafeScreenshotPath, CACHE_CONTROL } from './thumbnails.js';
 
 const PORT = process.env.LAB_PORT || 4000;
 
@@ -35,6 +36,28 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const p = url.pathname;
+
+    // Downscaled sidebar previews. Full-page screenshots are 1-2 MB each and a
+    // dataset has ~190 of them, so the snapshot list asks for these few-KB
+    // crops instead of the originals.
+    if (p === '/lab/thumb' && req.method === 'GET') {
+      const src = url.searchParams.get('p') || '';
+      if (!isSafeScreenshotPath(src)) return send(res, 400, { error: 'bad path' });
+      try {
+        const { body, etag } = await getThumbnail(src, url.searchParams.get('w'));
+        if (req.headers['if-none-match'] === etag) {
+          res.writeHead(304, { ETag: etag, 'Cache-Control': CACHE_CONTROL });
+          return res.end();
+        }
+        return send(res, 200, body, {
+          'Content-Type': 'image/webp',
+          'Cache-Control': CACHE_CONTROL,
+          ETag: etag,
+        });
+      } catch (e) {
+        return send(res, e.status || 502, { error: String(e.message || e) });
+      }
+    }
 
     if (p === '/lab/config' && req.method === 'GET') {
       return send(res, 200, {

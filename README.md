@@ -1,6 +1,34 @@
 ## Getting Started
 
-Run npm install && npm run dev to start.
+```bash
+npm install && npm install --prefix server
+npm run dev            # vite dev server, with hot reload
+node server/index.js   # /lab backend on :4000
+```
+
+## Deploying
+
+Serve the **built** app, not the dev server:
+
+```bash
+npm install && npm install --prefix server
+npm run build                       # emits dist/
+node server/index.js &              # /lab backend on :4000
+npm run preview -- --host --port 80 # serves dist/ + proxies /api, /nala, /lab
+```
+
+`npm run dev` on port 80 also works, but it ships unbundled source: every
+module is a separate request and nothing is minified or cached, which is the
+single biggest cause of slow page loads. `vite preview` serves the same
+hashed, minified, long-cacheable bundles the build produces, and
+`vite.config.js` gives `preview` the same `/api`, `/nala` and `/lab` proxies
+as `dev` (Vite keeps `server.proxy` and `preview.proxy` separate, so they must
+be shared explicitly — they are).
+
+The backend also serves `/lab/thumb`, which downscales the 1-2 MB full-page
+screenshots into the few-KB previews the viewer's snapshot list renders, and
+caches them under `server/.thumb-cache/`. That directory is disposable; delete
+it to reclaim disk.
 
 ## Run Console
 

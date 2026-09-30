@@ -178,16 +178,26 @@ const buildJudgeRegions = async ({ aUrl, bUrl, diffUrl, hotspots }) => {
   }));
 };
 
-const Thumb = ({ src }) => {
-  const [errored, setErrored] = useState(false);
-  if (!src || errored) return <div className="w-full h-full bg-gray-300" />;
+// The snapshot list renders ~190 of these in a 48x40 box. Ask the backend for
+// a pre-cropped few-KB WebP rather than the 1-2 MB full-page PNG; if the
+// thumbnail service isn't reachable, fall back to the original so the list
+// still renders.
+const thumbUrl = (p, w = 96) => (p ? `/lab/thumb?p=${encodeURIComponent(p)}&w=${w}` : null);
+
+const Thumb = ({ path }) => {
+  const [stage, setStage] = useState('thumb');
+  useEffect(() => setStage('thumb'), [path]);
+  if (!path || stage === 'failed') return <div className="w-full h-full bg-gray-300" />;
   return (
     <img
-      src={src}
+      src={stage === 'thumb' ? thumbUrl(path) : imgUrl(path)}
       alt=""
       loading="lazy"
+      decoding="async"
+      width="48"
+      height="40"
       className="w-full h-full object-cover object-top"
-      onError={() => setErrored(true)}
+      onError={() => setStage((s) => (s === 'thumb' ? 'full' : 'failed'))}
     />
   );
 };
@@ -629,14 +639,15 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
     if (rightPanelRef.current) rightPanelRef.current.scrollTop = 0;
   }, [activeIdx]);
 
-  // Preload next 3 snapshots so they're cached when the user navigates to them
+  // Preload the next snapshot so stepping through the list feels instant.
+  // Only one ahead: each screenshot is 1-2 MB, so prefetching three snapshots
+  // (six images) cost ~9 MB of speculative download per keypress and starved
+  // the images the user was actually looking at.
   useEffect(() => {
-    [1, 2, 3].forEach((offset) => {
-      const snap = filtered[activeIdx + offset];
-      if (!snap) return;
-      preloadImage(imgUrl(snap.a));
-      preloadImage(imgUrl(snap.b));
-    });
+    const snap = filtered[activeIdx + 1];
+    if (!snap) return;
+    preloadImage(imgUrl(snap.a));
+    preloadImage(imgUrl(snap.b));
   }, [activeIdx, filtered]);
 
   // Keyboard navigation
@@ -921,7 +932,7 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                   className="flex-shrink-0 rounded overflow-hidden bg-gray-200"
                   style={{ width: 48, height: 40 }}
                 >
-                  <Thumb src={imgUrl(snap.b || snap.a)} />
+                  <Thumb path={snap.b || snap.a} />
                 </div>
                 {/* Info */}
                 <div className="flex-1 min-w-0">
