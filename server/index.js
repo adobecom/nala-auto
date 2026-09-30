@@ -229,5 +229,8 @@ server.listen(PORT, () => {
   console.log(`[nala-lab] backend on http://localhost:${PORT}  mode=${gh.isLive() ? 'LIVE' : 'MOCK'}`);
   if (!gh.isLive()) {
     console.log('[nala-lab] MOCK mode: no GITHUB_TOKEN set, runs are simulated. See LAB.md to go live.');
+  } else {
+    // The first runner scan walks two weeks of job history; do it before anyone opens /runners.
+    getRunnerStatus().catch((e) => console.warn('[nala-lab] runner status warm-up failed:', e.message));
   }
 });

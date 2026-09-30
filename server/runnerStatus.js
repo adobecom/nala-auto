@@ -3,14 +3,17 @@
 // Two sources, merged:
 //   1. The runners API (online/offline/busy for every registered Mac mini).
 //      Needs "Administration: Read" on the token; when it is missing we say so.
-//   2. Job history from the last WINDOW_HOURS. Every job records the runner
-//      that picked it up, so this alone shows which runners are busy, what
-//      they last ran, and which jobs are still waiting for a runner.
+//   2. Job history. Every job records the runner that picked it up, so this
+//      alone shows which runners are busy, what they last ran, and which jobs
+//      are still waiting for a runner. Runners are discovered from the last
+//      DISCOVERY_DAYS; per-runner counts cover the last WINDOW_HOURS.
 // Completed runs never change, so their jobs are cached for as long as they
 // stay in the window; a refresh only re-fetches runs that are still active.
 import * as gh from './github.js';
 
 export const WINDOW_HOURS = 24;
+export const DISCOVERY_DAYS = 14;
+const MAX_RUN_PAGES = 5;
 const TTL_MS = 20_000;
 const FETCH_CONCURRENCY = 6;
 const RECENT_LIMIT = 30;
@@ -49,7 +52,9 @@ export function summarize({ runners, runnersError, jobs, now = Date.now() }) {
   const activity = new Map();
   for (const job of selfHosted) {
     if (!job.runner) continue;
-    const entry = activity.get(job.runner) || { current: null, last: null, jobs: 0, failures: 0 };
+    const entry = activity.get(job.runner) || { current: null, last: null, lastSeen: null, jobs: 0, failures: 0 };
+    const seenAt = job.completedAt || job.startedAt;
+    if (seenAt && ts(seenAt) > ts(entry.lastSeen)) entry.lastSeen = seenAt;
     if (job.status === 'in_progress') {
       if (!entry.current || ts(job.startedAt) > ts(entry.current.startedAt)) entry.current = job;
     } else if (job.status === 'completed') {
@@ -62,7 +67,7 @@ export function summarize({ runners, runnersError, jobs, now = Date.now() }) {
     activity.set(job.runner, entry);
   }
 
-  const empty = { current: null, last: null, jobs: 0, failures: 0 };
+  const empty = { current: null, last: null, lastSeen: null, jobs: 0, failures: 0 };
   let list;
   if (runners) {
     list = runners.map((runner) => {
@@ -77,14 +82,18 @@ export function summarize({ runners, runnersError, jobs, now = Date.now() }) {
       };
     });
   } else {
-    // Without the runners API we only know runners that ran something recently,
-    // and cannot tell "idle" from "offline" — call it "seen".
+    // Without the runners API we only know runners that ran something, and
+    // cannot tell "idle" from "offline": "seen" ran a job in the last
+    // WINDOW_HOURS, "quiet" only earlier.
     list = [...activity.entries()].map(([name, seen]) => {
       const labels = (seen.current || seen.last)?.labels || [];
+      let status = 'quiet';
+      if (seen.current) status = 'busy';
+      else if (ts(seen.lastSeen) >= windowStart) status = 'seen';
       return {
         name,
         os: null,
-        status: seen.current ? 'busy' : 'seen',
+        status,
         labels: labels.filter((label) => label !== 'self-hosted'),
         ...seen,
       };
@@ -106,12 +115,14 @@ export function summarize({ runners, runnersError, jobs, now = Date.now() }) {
     source: runners ? 'runners-api' : 'job-history',
     runnersError: runners ? null : runnersError,
     windowHours: WINDOW_HOURS,
+    discoveryDays: DISCOVERY_DAYS,
     totals: {
       runners: list.length,
       busy: count('busy'),
       idle: count('idle'),
       offline: count('offline'),
       seen: count('seen'),
+      quiet: count('quiet'),
       queued: queued.length,
     },
     runners: list,
@@ -134,9 +145,18 @@ async function mapLimit(items, limit, fn) {
 }
 
 async function collectJobs(now) {
-  const since = new Date(now - WINDOW_HOURS * 3600_000).toISOString().replace(/\.\d+Z$/, 'Z');
+  const since = new Date(now - DISCOVERY_DAYS * 86400_000).toISOString().replace(/\.\d+Z$/, 'Z');
+  const listRecent = async () => {
+    const all = [];
+    for (let page = 1; page <= MAX_RUN_PAGES; page += 1) {
+      const runs = await gh.listRepoRuns(`per_page=100&page=${page}&created=${encodeURIComponent(`>=${since}`)}`);
+      all.push(...runs);
+      if (runs.length < 100) break;
+    }
+    return all;
+  };
   const [recent, active, queued] = await Promise.all([
-    gh.listRepoRuns(`per_page=100&created=${encodeURIComponent(`>=${since}`)}`),
+    listRecent(),
     gh.listRepoRuns('per_page=50&status=in_progress'),
     gh.listRepoRuns('per_page=50&status=queued'),
   ]);
@@ -171,7 +191,7 @@ export async function getRunnerStatus() {
     return {
       mode: 'mock',
       message: 'No GITHUB_TOKEN is set, so runner status is unavailable.',
-      totals: { runners: 0, busy: 0, idle: 0, offline: 0, seen: 0, queued: 0 },
+      totals: { runners: 0, busy: 0, idle: 0, offline: 0, seen: 0, quiet: 0, queued: 0 },
       runners: [],
       queued: [],
       recent: [],
@@ -186,6 +206,12 @@ export async function getRunnerStatus() {
         return cached.value;
       })
       .finally(() => { inflight = null; });
+  }
+  // A refresh takes several seconds of GitHub calls; serve the previous
+  // snapshot meanwhile (its updatedAt shows its age) and only wait on the first load.
+  if (cached) {
+    inflight.catch(() => {});
+    return cached.value;
   }
   return inflight;
 }

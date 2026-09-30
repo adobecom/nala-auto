@@ -55,7 +55,7 @@ test('runners API: offline/idle/busy and runners with no history', () => {
   ]);
   assert.deepEqual(out.runners[0].labels, ['ios-sim']);
   assert.equal(out.runners[1].jobs, 1);
-  assert.deepEqual(out.totals, { runners: 3, busy: 1, idle: 1, offline: 1, seen: 0, queued: 0 });
+  assert.deepEqual(out.totals, { runners: 3, busy: 1, idle: 1, offline: 1, seen: 0, quiet: 0, queued: 0 });
 });
 
 test('jobs completed before the window do not count toward totals', () => {
@@ -67,4 +67,7 @@ test('jobs completed before the window do not count toward totals', () => {
   assert.equal(out.runners[0].jobs, 0);
   assert.equal(out.runners[0].failures, 0);
   assert.equal(out.runners[0].last.conclusion, 'failure');
+  assert.equal(out.runners[0].status, 'quiet');
+  assert.equal(out.runners[0].lastSeen, '2024-12-30T00:00:00Z');
+  assert.equal(out.totals.quiet, 1);
 });

@@ -54,8 +54,9 @@ the backend caches for 20s and keeps jobs of completed runs in memory.
 Online/idle/offline status for every registered runner comes from the GitHub
 runners API, which needs the backend's `GITHUB_TOKEN` to have **Administration:
 Read** (fine-grained PAT) or admin access (classic PAT) on the workflow repo.
-Without it, the page still works from job history but only lists runners that
-ran something in the last 24 hours and can't show idle or offline machines.
+Without it, the page still works from job history: it lists runners that ran a
+job in the last 14 days (with "last seen"), but can't show online vs offline or
+runners that have been silent longer than that.
 
 ### Backend tests
 

@@ -9,7 +9,8 @@ const STATUS = {
   busy: { label: 'Busy', dot: 'bg-amber-500', chip: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
   idle: { label: 'Idle', dot: 'bg-green-500', chip: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' },
   offline: { label: 'Offline', dot: 'bg-gray-400', chip: 'bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
-  seen: { label: 'Seen recently', dot: 'bg-sky-500', chip: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300' },
+  quiet: { label: 'Quiet', dot: 'bg-gray-400', chip: 'bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
+  seen: { label: 'Active today', dot: 'bg-sky-500', chip: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300' },
 };
 
 const CONCLUSION = {
@@ -113,7 +114,10 @@ export default function RunnersPage() {
       { label: 'Busy', value: totals.busy, key: 'busy' },
       ...(fromApi
         ? [{ label: 'Idle', value: totals.idle, key: 'idle' }, { label: 'Offline', value: totals.offline, key: 'offline' }]
-        : [{ label: 'Seen, not busy', value: totals.seen, key: 'seen' }]),
+        : [
+          { label: `Active in ${data.windowHours}h`, value: totals.seen, key: 'seen' },
+          { label: `Quiet > ${data.windowHours}h`, value: totals.quiet, key: 'quiet' },
+        ]),
       { label: 'Queued jobs', value: totals.queued },
     ]
     : [];
@@ -156,15 +160,6 @@ export default function RunnersPage() {
 
         {data?.mode === 'mock' && (
           <div className={`rounded-xl border p-4 text-sm shadow-sm ${card}`}>{data.message}</div>
-        )}
-
-        {data && data.mode !== 'mock' && !fromApi && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-            Showing runners that picked up a job in the last {data.windowHours}h. Idle and offline machines
-            aren&apos;t listed because the GitHub token can&apos;t read the runner list. To show them, give the
-            token <b>Administration: Read</b> (fine-grained) on {data.owner}/{data.repo}.
-            {data.runnersError && <span className="mt-1 block opacity-70">GitHub said: {data.runnersError}</span>}
-          </div>
         )}
 
         {!data && !error && <p className={subtle}>Loading runner status…</p>}
@@ -217,6 +212,7 @@ export default function RunnersPage() {
                       <div className={`text-xs ${subtle}`}>
                         {runner.jobs} job{runner.jobs === 1 ? '' : 's'} in {data.windowHours}h
                         {runner.failures ? ` · ${runner.failures} failed` : ''}
+                        {runner.lastSeen ? ` · last seen ${ago(runner.lastSeen, now)} ago` : ''}
                       </div>
                     </div>
                   </li>
