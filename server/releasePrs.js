@@ -143,9 +143,10 @@ async function includedPr(owner, repo, number) {
 
 async function load({ owner, repo, name }) {
   const { head, base } = branches();
-  const list = await ghGet(`/repos/${owner}/${repo}/pulls?state=all&head=${owner}:${head}&base=${base}`
-    + `&sort=created&direction=desc&per_page=${MAX_RELEASES}`);
-  const items = (list || []).slice(0, MAX_RELEASES);
+  // Search API: the REST pulls `head` filter drops closed PRs on some repos.
+  const q = encodeURIComponent(`repo:${owner}/${repo} is:pr head:${head} base:${base}`);
+  const search = await ghGet(`/search/issues?q=${q}&sort=created&order=desc&per_page=${MAX_RELEASES}`);
+  const items = (search.items || []).slice(0, MAX_RELEASES);
 
   const releases = await mapLimit(items, CONCURRENCY, async (it) => {
     const pr = await ghGet(`/repos/${owner}/${repo}/pulls/${it.number}`);
