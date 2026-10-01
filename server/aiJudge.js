@@ -36,6 +36,9 @@ async function fetchImageBase64(relPath) {
 }
 
 const MAX_REGIONS = 4;
+// Reasoning models (Qwen) spend hidden tokens before answering; 500 truncated the JSON.
+const MAX_TOKENS = 2000;
+const MODEL_TIMEOUT_MS = 120000;
 
 // Client-cropped strips arrive as "data:image/png;base64,...."
 function parseDataUrl(dataUrl) {
@@ -69,7 +72,8 @@ async function callOpenAiCompatible({ baseUrl, apiKey, model, images, prompt }) 
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content }], max_tokens: 500, temperature: 0 }),
+    body: JSON.stringify({ model, messages: [{ role: 'user', content }], max_tokens: MAX_TOKENS, temperature: 0 }),
+    signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -89,7 +93,8 @@ async function callAnthropic({ baseUrl, apiKey, model, images, prompt }) {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model, max_tokens: 500, messages: [{ role: 'user', content }] }),
+    body: JSON.stringify({ model, max_tokens: MAX_TOKENS, messages: [{ role: 'user', content }] }),
+    signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -99,19 +104,31 @@ async function callAnthropic({ baseUrl, apiKey, model, images, prompt }) {
   return (json.content || []).map((b) => b.text || '').join('');
 }
 
-function parseVerdict(raw) {
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return { verdict: 'uncertain', confidence: null, reasoning: raw.trim() || 'The model did not return a parseable result' };
-  try {
-    const parsed = JSON.parse(match[0]);
-    return {
-      verdict: ['regression', 'noise', 'uncertain'].includes(parsed.verdict) ? parsed.verdict : 'uncertain',
-      confidence: typeof parsed.confidence === 'number' ? parsed.confidence : null,
-      reasoning: parsed.reasoning || raw.trim(),
-    };
-  } catch {
-    return { verdict: 'uncertain', confidence: null, reasoning: raw.trim() };
+export function parseVerdict(raw) {
+  const text = String(raw || '').trim();
+  const match = text.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[0]);
+      return {
+        verdict: ['regression', 'noise', 'uncertain'].includes(parsed.verdict) ? parsed.verdict : 'uncertain',
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : null,
+        reasoning: parsed.reasoning || text,
+      };
+    } catch { /* fall through to lenient field extraction */ }
   }
+  // Truncated or slightly malformed JSON: pull the fields out individually.
+  const verdict = /"verdict"\s*:\s*"(regression|noise|uncertain)"/.exec(text)?.[1];
+  if (verdict) {
+    const conf = /"confidence"\s*:\s*([0-9.]+)/.exec(text)?.[1];
+    const reason = /"reasoning"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(text)?.[1];
+    return {
+      verdict,
+      confidence: conf !== undefined && !Number.isNaN(Number(conf)) ? Number(conf) : null,
+      reasoning: reason ? reason.replace(/\\"/g, '"') : text,
+    };
+  }
+  return { verdict: 'uncertain', confidence: null, reasoning: text || 'The model did not return a parseable result' };
 }
 
 // Falls back to the Ask agent's AI Foundry key, using a vision-capable model
