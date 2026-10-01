@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import Breadcrumb from '../components/Breadcrumb';
 import Header from '../components/Header';
@@ -72,6 +73,41 @@ function Signoffs({ signed, missing, isDarkMode }) {
   );
 }
 
+// Repos without SOT labels: show the PR's own labels (e.g. "verified", "QA Approved").
+function Labels({ labels, isDarkMode }) {
+  if (!labels?.length) return <span className="text-xs opacity-60">No labels</span>;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {labels.map((label) => (
+        <span key={label} className={`rounded-full px-2 py-0.5 text-xs ${isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700'}`}>
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+Labels.propTypes = {
+  labels: PropTypes.arrayOf(PropTypes.string),
+  isDarkMode: PropTypes.bool.isRequired,
+};
+
+function Status({ release, isDarkMode }) {
+  if (release.signed.length + release.missing.length === 0) {
+    return <Labels labels={release.labels} isDarkMode={isDarkMode} />;
+  }
+  return <Signoffs signed={release.signed} missing={release.missing} isDarkMode={isDarkMode} />;
+}
+
+Status.propTypes = {
+  release: PropTypes.shape({
+    signed: PropTypes.arrayOf(PropTypes.string),
+    missing: PropTypes.arrayOf(PropTypes.string),
+    labels: PropTypes.arrayOf(PropTypes.string),
+  }).isRequired,
+  isDarkMode: PropTypes.bool.isRequired,
+};
+
 Signoffs.propTypes = {
   signed: PropTypes.arrayOf(PropTypes.string).isRequired,
   missing: PropTypes.arrayOf(PropTypes.string).isRequired,
@@ -85,13 +121,27 @@ export default function ReleasesPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [repos, setRepos] = useState([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const repo = searchParams.get('repo') || repos[0]?.id || '';
+
+  useEffect(() => {
+    fetch('/lab/releases/repos', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((body) => setRepos(body.repos || []))
+      .catch(() => setRepos([]));
+  }, []);
 
   const refresh = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const response = await fetch(`/lab/releases${force ? '?refresh=1' : ''}`, { cache: 'no-store' });
+      const params = new URLSearchParams();
+      if (repo) params.set('repo', repo);
+      if (force) params.set('refresh', '1');
+      const response = await fetch(`/lab/releases?${params}`, { cache: 'no-store' });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+      if (repo && `${body.owner}/${body.repo}`.toLowerCase() !== repo.toLowerCase()) return;
       setData(body);
       setError('');
     } catch (requestError) {
@@ -100,7 +150,12 @@ export default function ReleasesPage() {
       setLoading(false);
       setNow(Date.now());
     }
-  }, []);
+  }, [repo]);
+
+  useEffect(() => {
+    setData(null);
+    setError('');
+  }, [repo]);
 
   useEffect(() => {
     if (localStorage.getItem('theme') === 'dark') {
@@ -141,14 +196,14 @@ export default function ReleasesPage() {
         activeMenu={activeMenu}
         setActiveMenu={setActiveMenu}
       />
-      <Breadcrumb items={[{ label: 'Milo releases' }]} isDarkMode={isDarkMode} activeMenu={activeMenu} />
+      <Breadcrumb items={[{ label: 'Releases' }]} isDarkMode={isDarkMode} activeMenu={activeMenu} />
 
       <main className={`container mx-auto max-w-5xl space-y-6 p-4 ${text}`}>
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h1 className="text-2xl font-semibold">Milo releases</h1>
+            <h1 className="text-2xl font-semibold">Releases</h1>
             <p className={`text-sm ${subtle}`}>
-              &ldquo;{data?.title || '[Release] Stage to Main'}&rdquo; PRs
+              {data?.head || 'stage'} → {data?.base || 'main'} PRs
               {data?.owner ? ` in ${data.owner}/${data.repo}` : ''}
               {data?.updatedAt ? ` · updated ${ago(data.updatedAt, now)} ago` : ''}
             </p>
@@ -162,6 +217,26 @@ export default function ReleasesPage() {
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
+
+        {repos.length > 1 && (
+          <div className="flex flex-wrap gap-1.5" role="tablist">
+            {repos.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                role="tab"
+                aria-selected={r.id === repo}
+                title={r.id}
+                onClick={() => setSearchParams({ repo: r.id })}
+                className={`rounded-full border px-3 py-1 text-sm ${r.id === repo
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : `${card} hover:opacity-80`}`}
+              >
+                {r.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {error && (
           <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
@@ -199,9 +274,11 @@ export default function ReleasesPage() {
 
             <div>
               <h3 className={`mb-1.5 text-xs font-semibold uppercase tracking-wide ${subtle}`}>
-                Team sign-off ({r.signed.length}/{r.signed.length + r.missing.length})
+                {r.signed.length + r.missing.length
+                  ? `Team sign-off (${r.signed.length}/${r.signed.length + r.missing.length})`
+                  : 'Labels'}
               </h3>
-              <Signoffs signed={r.signed} missing={r.missing} isDarkMode={isDarkMode} />
+              <Status release={r} isDarkMode={isDarkMode} />
             </div>
 
             {(r.checks?.failed?.length > 0 || r.checks?.pending?.length > 0) && (
@@ -259,7 +336,7 @@ export default function ReleasesPage() {
                       {' '}· {r.includedCount} PRs · +{r.additions} −{r.deletions} ·{' '}
                       {r.state === 'merged' ? `merged ${ago(r.mergedAt, now)} ago` : `closed ${ago(r.closedAt, now)} ago`}
                     </span>
-                    <Signoffs signed={r.signed} missing={r.missing} isDarkMode={isDarkMode} />
+                    <Status release={r} isDarkMode={isDarkMode} />
                   </div>
                   <div className="flex items-start gap-2">
                     <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATE[r.state] || STATE.closed}`}>

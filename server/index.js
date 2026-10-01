@@ -12,7 +12,7 @@ import { manualSessionConfig, createManualSession, endManualSession } from './ma
 import * as aiJudge from './aiJudge.js';
 import * as askAgent from './askAgent.js';
 import { getRunnerStatus } from './runnerStatus.js';
-import { getReleasePrs } from './releasePrs.js';
+import { getReleasePrs, releaseRepos } from './releasePrs.js';
 import { getThumbnail, isSafeScreenshotPath, CACHE_CONTROL } from './thumbnails.js';
 
 const PORT = process.env.LAB_PORT || 4000;
@@ -178,13 +178,16 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // Milo "[Release] Stage to Main" PRs: sign-offs, checks, bundled PRs.
+    // Release (stage -> main) PRs per repo: sign-offs, checks, bundled PRs.
+    if (p === '/lab/releases/repos' && req.method === 'GET') {
+      return send(res, 200, { repos: releaseRepos().map(({ id, name }) => ({ id, name })) });
+    }
     if (p === '/lab/releases' && req.method === 'GET') {
       try {
-        const force = new URL(req.url, 'http://x').searchParams.get('refresh') === '1';
-        return send(res, 200, await getReleasePrs({ force }));
+        const params = new URL(req.url, 'http://x').searchParams;
+        return send(res, 200, await getReleasePrs({ repo: params.get('repo'), force: params.get('refresh') === '1' }));
       } catch (e) {
-        return send(res, 502, { error: String(e.message || e) });
+        return send(res, e.status || 502, { error: String(e.message || e) });
       }
     }
 

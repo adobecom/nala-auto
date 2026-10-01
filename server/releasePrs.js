@@ -1,6 +1,6 @@
-// Milo "[Release] Stage to Main" PR monitor: the open release PR plus recent
-// releases, with each team's SOT sign-off labels, CI check rollup and the PRs
-// the release bundles (listed in the release PR body).
+// Release PR monitor for Milo and its consumer repos: the open stage -> main
+// PR plus recent ones, with sign-off labels, CI check rollup and the PRs the
+// release bundles (listed in the release PR body).
 /* global process */
 import { ghGet } from './github.js';
 
@@ -12,9 +12,25 @@ const CONCURRENCY = 5;
 const FAILED = new Set(['failure', 'timed_out', 'action_required', 'startup_failure', 'error']);
 const PASSED = new Set(['success', 'neutral', 'skipped']);
 
-function cfg() {
-  const [owner, repo] = (process.env.RELEASE_REPO || 'adobecom/milo').split('/');
-  return { owner, repo, title: process.env.RELEASE_TITLE || '[Release] Stage to Main' };
+const DEFAULT_REPOS = 'adobecom/milo=Milo,adobecom/da-express-milo=Express,adobecom/da-cc=CC,'
+  + 'adobecom/da-bacom=BACOM,adobecom/da-dc=DC';
+
+// RELEASE_REPOS="owner/repo=Name,..."; release PRs are matched by branch
+// (RELEASE_HEAD -> RELEASE_BASE) since titles differ between repos.
+export function parseRepos(spec = DEFAULT_REPOS) {
+  return String(spec).split(',').map((s) => s.trim()).filter(Boolean).map((entry) => {
+    const [full, name] = entry.split('=');
+    const [owner, repo] = full.trim().split('/');
+    return { id: `${owner}/${repo}`, owner, repo, name: (name || repo || '').trim() };
+  }).filter((r) => r.owner && r.repo);
+}
+
+export function releaseRepos() {
+  return parseRepos(process.env.RELEASE_REPOS || DEFAULT_REPOS);
+}
+
+function branches() {
+  return { head: process.env.RELEASE_HEAD || 'stage', base: process.env.RELEASE_BASE || 'main' };
 }
 
 // PR numbers in this repo referenced by the release body, in order, deduped.
@@ -105,7 +121,8 @@ async function checksFor(owner, repo, sha, final) {
 }
 
 async function includedPr(owner, repo, number) {
-  const hit = prCache.get(number);
+  const key = `${owner}/${repo}#${number}`;
+  const hit = prCache.get(key);
   if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.value;
   try {
     const p = await ghGet(`/repos/${owner}/${repo}/pulls/${number}`);
@@ -117,18 +134,18 @@ async function includedPr(owner, repo, number) {
       state: p.merged_at ? 'merged' : p.state,
       labels: (p.labels || []).map((l) => l.name),
     };
-    prCache.set(number, { at: Date.now(), value });
+    prCache.set(key, { at: Date.now(), value });
     return value;
   } catch {
     return { number, url: `https://github.com/${owner}/${repo}/pull/${number}` };
   }
 }
 
-async function load() {
-  const { owner, repo, title } = cfg();
-  const q = encodeURIComponent(`repo:${owner}/${repo} is:pr in:title "${title}"`);
-  const search = await ghGet(`/search/issues?q=${q}&sort=created&order=desc&per_page=20`);
-  const items = (search.items || []).filter((it) => it.title.trim().startsWith(title)).slice(0, MAX_RELEASES);
+async function load({ owner, repo, name }) {
+  const { head, base } = branches();
+  const list = await ghGet(`/repos/${owner}/${repo}/pulls?state=all&head=${owner}:${head}&base=${base}`
+    + `&sort=created&direction=desc&per_page=${MAX_RELEASES}`);
+  const items = (list || []).slice(0, MAX_RELEASES);
 
   const releases = await mapLimit(items, CONCURRENCY, async (it) => {
     const pr = await ghGet(`/repos/${owner}/${repo}/pulls/${it.number}`);
@@ -170,25 +187,31 @@ async function load() {
     delete r.includedNumbers;
   }
 
-  return { owner, repo, title, expectedSignoffs: expected, releases, updatedAt: new Date().toISOString() };
+  return {
+    owner, repo, name, head, base, expectedSignoffs: expected, releases, updatedAt: new Date().toISOString(),
+  };
 }
 
-let cached = null;
-let inflight = null;
+const cache = new Map(); // repo id -> { cached, inflight }
 
-export async function getReleasePrs({ force = false } = {}) {
-  if (!force && cached && Date.now() - cached.at < TTL_MS) return cached.value;
-  if (!inflight) {
-    inflight = load()
+export async function getReleasePrs({ repo: id, force = false } = {}) {
+  const repos = releaseRepos();
+  const target = id ? repos.find((r) => r.id.toLowerCase() === String(id).toLowerCase()) : repos[0];
+  if (!target) throw Object.assign(new Error(`Unknown release repo: ${id}`), { status: 404 });
+  const slot = cache.get(target.id) || {};
+  cache.set(target.id, slot);
+  if (!force && slot.cached && Date.now() - slot.cached.at < TTL_MS) return slot.cached.value;
+  if (!slot.inflight) {
+    slot.inflight = load(target)
       .then((value) => {
-        cached = { at: Date.now(), value };
+        slot.cached = { at: Date.now(), value };
         return value;
       })
-      .finally(() => { inflight = null; });
+      .finally(() => { slot.inflight = null; });
   }
-  if (cached && !force) {
-    inflight.catch(() => {});
-    return cached.value;
+  if (slot.cached && !force) {
+    slot.inflight.catch(() => {});
+    return slot.cached.value;
   }
-  return inflight;
+  return slot.inflight;
 }

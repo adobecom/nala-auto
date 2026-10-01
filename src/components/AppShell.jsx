@@ -10,7 +10,7 @@ const SECTIONS = [
     title: 'Overview',
     items: [
       { label: 'Dashboard', hint: 'Latest runs at a glance', to: '/', icon: '⌂' },
-      { label: 'Milo releases', hint: 'Stage → Main PR status', to: '/releases', icon: '⇪' },
+      { label: 'Releases', hint: 'Stage → Main PRs: Milo + consumers', to: '/releases', icon: '⇪' },
     ],
   },
   {

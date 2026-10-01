@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseIncludedPrs, summarizeChecks, signoffs, isSignoff } from './releasePrs.js';
+import {
+  parseIncludedPrs, summarizeChecks, signoffs, isSignoff, parseRepos,
+} from './releasePrs.js';
 
 test('parseIncludedPrs extracts unique PR numbers for the repo only', () => {
   const body = `## Included
@@ -46,4 +48,12 @@ test('signoffs splits signed and missing SOT labels', () => {
   assert.equal(isSignoff('needs-review'), false);
   const r = signoffs(['CC SOT 👌', 'ready'], ['BAcom SOT 👌', 'CC SOT 👌']);
   assert.deepEqual(r, { signed: ['CC SOT 👌'], missing: ['BAcom SOT 👌'] });
+});
+
+test('parseRepos reads owner/repo=Name lists', () => {
+  assert.deepEqual(parseRepos('adobecom/milo=Milo, adobecom/da-cc ,bad'), [
+    { id: 'adobecom/milo', owner: 'adobecom', repo: 'milo', name: 'Milo' },
+    { id: 'adobecom/da-cc', owner: 'adobecom', repo: 'da-cc', name: 'da-cc' },
+  ]);
+  assert.equal(parseRepos()[0].id, 'adobecom/milo');
 });
