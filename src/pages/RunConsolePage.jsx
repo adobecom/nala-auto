@@ -93,7 +93,9 @@ const RunConsolePage = () => {
   const [selVersions, setSelVersions] = useState(['18.3']);
   const [run, setRun] = useState(null);
   const [runs, setRuns] = useState([]);
-  const [busy, setBusy] = useState(false);
+  // Only true while the POST is in flight: a live run elsewhere must not lock
+  // the button for other datasets (the backend refuses true duplicates).
+  const [submitting, setSubmitting] = useState(false);
   const wsRef = useRef(null);
 
   useEffect(() => {
@@ -152,24 +154,28 @@ const RunConsolePage = () => {
       const m = JSON.parse(ev.data);
       if (m.kind === 'update') {
         setRun(m);
-        if (m.done) {
-          setBusy(false);
-          refreshRuns();
-        }
+        if (m.done) refreshRuns();
       }
     };
-    ws.onclose = () => setBusy(false);
-    ws.onerror = () => setBusy(false);
   };
 
   const attachToRun = async (runId) => {
     try {
       const snap = await (await fetch(`/lab/runs/${runId}`)).json();
       setRun(snap);
-      setBusy(!snap.done);
       if (!snap.done) openStream(runId);
     } catch { /* noop */ }
   };
+
+  // Keep the list (and the per-dataset "already running" lock) fresh while
+  // anything is live, including runs started from another tab.
+  const anyLive = runs.some((r) => !r.done);
+  useEffect(() => {
+    if (!anyLive) return undefined;
+    const t = setInterval(refreshRuns, 15000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyLive]);
 
   // On load, rediscover runs so a page refresh reconnects to an in-flight run.
   useEffect(() => {
@@ -246,7 +252,11 @@ const RunConsolePage = () => {
       : kind === 'quick' ? quickViewports.length
         : kind === 'figma' ? 1
           : (config?.shards?.length || 3);
-  const canRun = !busy && (kind === 'ios'
+  // Same kind + dataset already live? Running it again would race on its results.
+  const sameRunning = (kind === 'screenshot' || kind === 'ios')
+    ? runs.find((r) => !r.done && (r.runKind || 'screenshot') === kind && r.site === site)
+    : null;
+  const canRun = !submitting && !sameRunning && (kind === 'ios'
     ? combos > 0
     : kind === 'quick'
       ? quickLines.length > 0 && !quickError && quickViewports.length > 0
@@ -255,7 +265,7 @@ const RunConsolePage = () => {
         : true);
 
   const start = async () => {
-    setBusy(true);
+    setSubmitting(true);
     if (wsRef.current) {
       try {
         wsRef.current.close();
@@ -312,7 +322,8 @@ const RunConsolePage = () => {
       refreshRuns();
     } catch (e) {
       setRun({ status: 'error', note: e.message || String(e), jobs: [] });
-      setBusy(false);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -639,7 +650,7 @@ const RunConsolePage = () => {
                 onClick={start}
                 disabled={!canRun}
               >
-                {busy ? 'Running…' : '▶ Run'}
+                {submitting ? 'Starting…' : sameRunning ? `${site} running…` : '▶ Run'}
               </button>
             </div>
           </div>

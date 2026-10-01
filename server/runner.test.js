@@ -149,3 +149,11 @@ test('createRun rejects an invalid figma request before dispatching', () => {
   assert.throws(() => createRun({ ...ok, viewports: ['chrome', 'ipad'] }), /exactly one viewport/);
   assert.throws(() => createRun({ ...ok, viewports: [] }), /exactly one viewport/);
 });
+
+test('different datasets can run at once; the same dataset twice is refused', () => {
+  const a = createRun({ site: 'concurrency-a' });
+  const b = createRun({ site: 'concurrency-b' });
+  assert.notEqual(a.id, b.id);
+  assert.throws(() => createRun({ site: 'concurrency-a' }), /already running/);
+  assert.doesNotThrow(() => createRun({ kind: 'ios', site: 'concurrency-a', devices: ['iPhone 15'] }));
+});

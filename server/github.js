@@ -94,19 +94,37 @@ export async function dispatch(inputs, workflow) {
   return t0;
 }
 
-export async function findRun(sinceMs, workflow) {
+// Several console runs can be in flight on the same workflow, so "newest run
+// since dispatch" is not enough. The workflows put our run id in run-name
+// ("… [<runId>]"), which is matched exactly; otherwise fall back to the oldest
+// fresh run that no other console run has claimed and that isn't tagged with
+// a different id.
+export function pickRun(workflowRuns, sinceMs, runId, isClaimed = () => false) {
+  const tag = (r) => (r.display_title || r.name || '').match(/\[([\w-]+)\]\s*$/)?.[1];
+  const fresh = (workflowRuns || []).filter(
+    (r) => new Date(r.created_at).getTime() >= sinceMs - 5000 && !isClaimed(r.id)
+  );
+  if (runId) {
+    const exact = fresh.find((r) => tag(r) === runId);
+    if (exact) return exact;
+  }
+  const untagged = fresh
+    .filter((r) => !tag(r))
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  return untagged[0] || null;
+}
+
+export async function findRun(sinceMs, workflow, runId, isClaimed) {
   const c = cfg();
   const wf = workflow || c.workflow;
   for (let i = 0; i < 15; i++) {
     await sleep(2000);
     const res = await gh(
-      `/repos/${c.owner}/${c.repo}/actions/workflows/${encodeURIComponent(wf)}/runs?branch=${c.ref}&event=workflow_dispatch&per_page=10`
+      `/repos/${c.owner}/${c.repo}/actions/workflows/${encodeURIComponent(wf)}/runs?branch=${c.ref}&event=workflow_dispatch&per_page=20`
     );
     if (!res.ok) continue;
     const data = await res.json();
-    const run = (data.workflow_runs || []).find(
-      (r) => new Date(r.created_at).getTime() >= sinceMs - 5000
-    );
+    const run = pickRun(data.workflow_runs, sinceMs, runId, isClaimed);
     if (run) return run;
   }
   return null;

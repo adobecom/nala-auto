@@ -164,6 +164,13 @@ export function createRun(body = {}) {
         : (body.site || 'bacom').trim();
   const live = gh.isLive();
 
+  // Different datasets may run side by side; the same dataset twice would race
+  // on its "latest" results, so that one is refused. Quick/Figma get a fresh
+  // one-off site per run and never collide.
+  const dup = [...runs.values()].find(
+    (r) => !r.done && r.kind === kind && r.site === site && Date.now() - r.startedAt < 6 * 3600e3
+  );
+  if (dup) throw new Error(`${site} is already running (#${dup.id}). Wait for it to finish or open it from Recent runs.`);
   const runnablePairs = devices.flatMap((d) => iosVersions.filter((v) => pairRunnable(d, v)).map((v) => ({ d, v })));
   const shards = shardsFor(runnablePairs.length);
   const mockJobs =
@@ -319,7 +326,8 @@ async function driveLive(run) {
   run.status = 'locating run';
   push(run);
 
-  const found = await gh.findRun(t0, wf);
+  const claimed = (ghId) => [...runs.values()].some((r) => r !== run && r.ghRunId === ghId);
+  const found = await gh.findRun(t0, wf, run.id, claimed);
   if (!found) {
     run.status = 'error';
     run.note = 'Dispatched, but could not locate the run via API. Check GitHub Actions directly.';
