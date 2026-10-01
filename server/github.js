@@ -60,6 +60,24 @@ async function gh(path, opts = {}) {
   });
 }
 
+// Read-only GET against any repo (e.g. adobecom/milo release PRs). Works
+// unauthenticated for public repos, at GitHub's lower anonymous rate limit.
+export async function ghGet(path) {
+  const { token } = cfg();
+  const res = await fetch(`${API}${path}`, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(`GET ${path} failed (${res.status}): ${body.message || res.statusText}`);
+  }
+  return res.json();
+}
+
 // Trigger workflow_dispatch. GitHub returns 204 with no run id, so callers
 // use findRun() to locate the run created just after this returns.
 export async function dispatch(inputs, workflow) {

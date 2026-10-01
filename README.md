@@ -69,6 +69,21 @@ backend env (`RUNNER_ALIASES=host=Name,...`); the current four sj hosts are buil
 node --test server/*.test.js
 ```
 
+## Milo releases
+
+`/releases` monitors the `[Release] Stage to Main` PRs in adobecom/milo. It shows:
+
+- the open release PR, with:
+  - team SOT sign-off labels (signed vs. still missing);
+  - the CI check rollup, with links to failing or running checks;
+  - the PRs bundled in the release body;
+- the last few merged releases.
+
+Data comes from `GET /lab/releases` (`server/releasePrs.js`). Responses are cached for 2 minutes; `?refresh=1` bypasses the cache.
+
+- `GITHUB_TOKEN` is optional because milo is public, but it avoids the low unauthenticated rate limit.
+- `RELEASE_REPO` (default `adobecom/milo`) and `RELEASE_TITLE` (default `[Release] Stage to Main`) override the target.
+
 ## AI Judge
 
 The "🤖 AI Judge" button in the screenshot-diff viewer asks a vision model

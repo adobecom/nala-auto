@@ -13,6 +13,7 @@ const RunConsolePage = lazy(() => import('./pages/RunConsolePage'));
 const ManualIOSPage = lazy(() => import('./pages/ManualIOSPage'));
 const BcAgentPage = lazy(() => import('./pages/BcAgentPage'));
 const RunnersPage = lazy(() => import('./pages/RunnersPage'));
+const ReleasesPage = lazy(() => import('./pages/ReleasesPage'));
 const ImageDiffPage = lazy(() => import('./pages/ImageDiffPage'));
 
 const PageFallback = () => (
@@ -32,6 +33,7 @@ function App() {
               <Route path="/manual-ios" element={<ManualIOSPage />} />
               <Route path="/bc-agent" element={<BcAgentPage />} />
               <Route path="/runners" element={<RunnersPage />} />
+              <Route path="/releases" element={<ReleasesPage />} />
               <Route path="/imagediff/:directory" element={<ImageDiffPage />} />
             </Route>
           </Routes>

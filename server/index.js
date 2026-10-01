@@ -12,6 +12,7 @@ import { manualSessionConfig, createManualSession, endManualSession } from './ma
 import * as aiJudge from './aiJudge.js';
 import * as askAgent from './askAgent.js';
 import { getRunnerStatus } from './runnerStatus.js';
+import { getReleasePrs } from './releasePrs.js';
 import { getThumbnail, isSafeScreenshotPath, CACHE_CONTROL } from './thumbnails.js';
 
 const PORT = process.env.LAB_PORT || 4000;
@@ -172,6 +173,16 @@ const server = http.createServer(async (req, res) => {
     if (p === '/lab/runners' && req.method === 'GET') {
       try {
         return send(res, 200, await getRunnerStatus());
+      } catch (e) {
+        return send(res, 502, { error: String(e.message || e) });
+      }
+    }
+
+    // Milo "[Release] Stage to Main" PRs: sign-offs, checks, bundled PRs.
+    if (p === '/lab/releases' && req.method === 'GET') {
+      try {
+        const force = new URL(req.url, 'http://x').searchParams.get('refresh') === '1';
+        return send(res, 200, await getReleasePrs({ force }));
       } catch (e) {
         return send(res, 502, { error: String(e.message || e) });
       }

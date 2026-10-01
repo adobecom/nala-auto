@@ -6,6 +6,7 @@ import { SITE_GROUPS } from '../lib/sites';
 
 const PAGES = [
   { title: 'Dashboard', url: '/', type: 'Page' },
+  { title: 'Milo releases (Stage to Main)', url: '/releases', type: 'Page' },
   { title: 'Run a dataset (Run console)', url: '/console', type: 'Workflow' },
   { title: 'Quick URL check', url: '/console?mode=quick', type: 'Workflow' },
   { title: 'Compare with Figma', url: '/console?mode=figma', type: 'Workflow' },
