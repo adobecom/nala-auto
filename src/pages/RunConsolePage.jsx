@@ -97,6 +97,7 @@ const RunConsolePage = () => {
   // the button for other datasets (the backend refuses true duplicates).
   const [submitting, setSubmitting] = useState(false);
   const wsRef = useRef(null);
+  const selectedRef = useRef(null);
 
   useEffect(() => {
     if (localStorage.getItem('theme') === 'dark') {
@@ -143,16 +144,24 @@ const RunConsolePage = () => {
     fetch('/lab/runs').then((r) => r.json()).then(setRuns).catch(() => {});
   };
 
-  const openStream = (runId) => {
+  const closeStream = () => {
     if (wsRef.current) {
       try { wsRef.current.close(); } catch { /* noop */ }
+      wsRef.current = null;
     }
+  };
+
+  const openStream = (runId) => {
+    closeStream();
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/lab/stream?runId=${runId}`);
     wsRef.current = ws;
     ws.onmessage = (ev) => {
+      // A stream that was replaced (user picked another run) must not
+      // overwrite the selection with its own updates.
+      if (wsRef.current !== ws) return;
       const m = JSON.parse(ev.data);
-      if (m.kind === 'update') {
+      if (m.kind === 'update' && m.runId === runId) {
         setRun(m);
         if (m.done) refreshRuns();
       }
@@ -160,8 +169,13 @@ const RunConsolePage = () => {
   };
 
   const attachToRun = async (runId) => {
+    // Drop the previous run's live stream first, otherwise its next update
+    // snaps the panel back to it right after the user clicked another run.
+    closeStream();
+    selectedRef.current = runId;
     try {
       const snap = await (await fetch(`/lab/runs/${runId}`)).json();
+      if (selectedRef.current !== runId) return; // a later click won
       setRun(snap);
       if (!snap.done) openStream(runId);
     } catch { /* noop */ }
@@ -266,6 +280,7 @@ const RunConsolePage = () => {
 
   const start = async () => {
     setSubmitting(true);
+    selectedRef.current = null;
     if (wsRef.current) {
       try {
         wsRef.current.close();
