@@ -18,7 +18,7 @@ const MONITOR_CHECKS = [
   { id: 'bam-explicit', group: 'Book a Meeting', title: 'Explicit sales request', detail: 'A direct sales request offers Schedule meeting and opens the meeting form.' },
   { id: 'bam-implicit', group: 'Book a Meeting', title: 'Implicit sales signal', detail: 'Enterprise pricing / demo questions offer a path to sales.' },
   { id: 'bam-clarify', group: 'Book a Meeting', title: 'Ambiguous request clarifies', detail: 'A vague "talk to someone" asks which product first, then offers the meeting.' },
-  { id: 'live-chat', group: 'Live Agent', title: 'Live advisor handoff', detail: 'On business.adobe.com, buying at scale connects to a live advisor (the monitor ends the connection).' },
+  { id: 'live-chat', group: 'Live Agent', title: 'Live advisor handoff', detail: 'Off by default: it would open a real chat in the sales advisors\' queue (BC_LIVE_ADVISOR=1 to run).' },
   { id: 'support-deflect', group: 'Live Agent', title: 'Support requests deflect', detail: 'Billing / account / install problems point to support, not a sales advisor.' },
   { id: 'out-of-scope', group: 'Guardrails', title: 'Out of scope / jailbreak', detail: 'Off-topic and prompt-injection requests are declined without product widgets.' },
   { id: 'feedback', group: 'Chat UI', title: 'Response feedback', detail: 'Assistant replies expose thumbs up / down controls.' },
@@ -320,7 +320,7 @@ const BcAgentPage = () => {
             </label>
             <div className={`rounded-lg px-4 py-3 text-sm ${isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-50 text-gray-600'}`}>
               Accepted behavior: sales may go directly to Schedule meeting; after the free generations, Firefly Gallery + Sign in
-              is valid; Live Agent is only expected on business.adobe.com (skipped elsewhere). A run takes about 5 minutes.
+              is valid; the Live Agent check is off because it would open a real sales-advisor chat. A run takes about 5 minutes.
             </div>
             <div className="flex items-center justify-between gap-3">
               <span className={`text-xs ${subtle}`}>
