@@ -32,6 +32,15 @@ test('summarizeChecks overall reflects pending and empty', () => {
   assert.equal(summarizeChecks([]).overall, 'none');
 });
 
+test('summarizeChecks ignores check suites not tied to the PR', () => {
+  const s = summarizeChecks([
+    { name: 'eslint', status: 'completed', conclusion: 'success', check_suite: { id: 1 } },
+    { name: 'update', status: 'completed', conclusion: 'failure', check_suite: { id: 2 } },
+  ], [], new Set([2]));
+  assert.equal(s.overall, 'passed');
+  assert.equal(s.total, 1);
+});
+
 test('signoffs splits signed and missing SOT labels', () => {
   assert.equal(isSignoff('MIQ SOT👌'), true);
   assert.equal(isSignoff('needs-review'), false);

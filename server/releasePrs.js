@@ -26,13 +26,16 @@ export function parseIncludedPrs(body, owner, repo) {
 }
 
 // One row per check name (newest wins), bucketed into failed/pending/passed.
-export function summarizeChecks(checkRuns = [], statuses = []) {
+// `ignoreSuites`: check-suite ids not tied to the PR (e.g. scheduled workflows
+// on the default branch that share the PR head sha) — GitHub's PR Checks tab hides them.
+export function summarizeChecks(checkRuns = [], statuses = [], ignoreSuites = new Set()) {
   const byName = new Map();
   const add = (row) => {
     const prev = byName.get(row.name);
     if (!prev || (row.at || '') > (prev.at || '')) byName.set(row.name, row);
   };
   for (const c of checkRuns) {
+    if (ignoreSuites.has(c.check_suite?.id)) continue;
     const state = c.status !== 'completed' ? 'pending' : (c.conclusion || 'pending');
     add({ name: c.name, state, url: c.html_url, at: c.completed_at || c.started_at });
   }
@@ -89,11 +92,14 @@ const prCache = new Map();
 
 async function checksFor(owner, repo, sha, final) {
   if (checkCache.has(sha)) return checkCache.get(sha);
-  const [runs, status] = await Promise.all([
+  const [runs, status, scheduled] = await Promise.all([
     ghGet(`/repos/${owner}/${repo}/commits/${sha}/check-runs?per_page=100`),
     ghGet(`/repos/${owner}/${repo}/commits/${sha}/status?per_page=100`),
+    ghGet(`/repos/${owner}/${repo}/actions/runs?head_sha=${sha}&event=schedule&per_page=100`)
+      .catch(() => ({ workflow_runs: [] })),
   ]);
-  const summary = summarizeChecks(runs.check_runs, status.statuses);
+  const ignore = new Set((scheduled.workflow_runs || []).map((r) => r.check_suite_id));
+  const summary = summarizeChecks(runs.check_runs, status.statuses, ignore);
   if (final) checkCache.set(sha, summary);
   return summary;
 }
