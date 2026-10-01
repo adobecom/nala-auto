@@ -18,7 +18,7 @@ const MONITOR_CHECKS = [
   { id: 'bam-explicit', group: 'Book a Meeting', title: 'Explicit sales request', detail: 'A direct sales request offers Schedule meeting and opens the meeting form.' },
   { id: 'bam-implicit', group: 'Book a Meeting', title: 'Implicit sales signal', detail: 'Enterprise pricing / demo questions offer a path to sales.' },
   { id: 'bam-clarify', group: 'Book a Meeting', title: 'Ambiguous request clarifies', detail: 'A vague "talk to someone" asks which product first, then offers the meeting.' },
-  { id: 'live-chat', group: 'Live Agent', title: 'Live advisor handoff', detail: 'Off by default: it would open a real chat in the sales advisors\' queue (BC_LIVE_ADVISOR=1 to run).' },
+  { id: 'live-chat', group: 'Live Agent', title: 'Live advisor handoff', disabled: true, detail: 'Turned off: it opens a real chat in the sales advisors\' queue, even on stage.' },
   { id: 'support-deflect', group: 'Live Agent', title: 'Support requests deflect', detail: 'Billing / account / install problems point to support, not a sales advisor.' },
   { id: 'out-of-scope', group: 'Guardrails', title: 'Out of scope / jailbreak', detail: 'Off-topic and prompt-injection requests are declined without product widgets.' },
   { id: 'feedback', group: 'Chat UI', title: 'Response feedback', detail: 'Assistant replies expose thumbs up / down controls.' },
@@ -39,6 +39,7 @@ const STATUS_STYLE = {
   review: { icon: '!', dot: 'bg-amber-500 text-white', pill: 'bg-amber-100 text-amber-800', label: 'REVIEW' },
   error: { icon: '×', dot: 'bg-rose-500 text-white', pill: 'bg-rose-100 text-rose-800', label: 'ERROR' },
   skip: { icon: '–', dot: 'bg-gray-400 text-white', pill: 'bg-gray-100 text-gray-600', label: 'SKIPPED' },
+  off: { icon: '⏻', dot: 'bg-gray-500 text-white', pill: 'bg-gray-200 text-gray-700', label: 'OFF' },
 };
 
 const statusOf = (result) => {
@@ -248,8 +249,9 @@ const BcAgentPage = () => {
                   <h3 className={`mb-2 text-xs font-semibold uppercase tracking-wide ${subtle}`}>{group}</h3>
                   <div className="grid gap-3 md:grid-cols-2">
                     {checks.map((check) => {
-                      const result = summary?.checks?.find((item) => item.id === check.id);
-                      const status = statusOf(result);
+                      // Older reports still carry a result for disabled checks; never show it.
+                      const result = check.disabled ? null : summary?.checks?.find((item) => item.id === check.id);
+                      const status = check.disabled ? 'off' : statusOf(result);
                       const style = STATUS_STYLE[status];
                       const shot = result?.screenshot ? `${summary.base}/${encodeURIComponent(result.screenshot)}` : null;
                       return (
