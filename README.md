@@ -126,7 +126,7 @@ Each repo is mapped to the datasets that cover it. For example, `adobecom/milo` 
 ```sh
 curl -X POST https://nala-auto.corp.adobe.com/lab/repo-runs \
   -H 'Content-Type: application/json' \
-  -d '{"repo":"adobecom/da-bacom","milolibs":"stage"}'
+  -d '{"repo":"adobecom/da-bacom","milolibs":"?milolibs=stage"}'
 ```
 
 The response is `{repo, runs:[{runId, site, resultsUrl}], errors}`.

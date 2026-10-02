@@ -11,6 +11,7 @@ const SECTIONS = [
     items: [
       { label: 'Dashboard', hint: 'Latest runs at a glance', to: '/', icon: '⌂' },
       { label: 'Releases', hint: 'Stage → Main PRs: Milo + consumers', to: '/releases', icon: '⇪' },
+      { label: 'Help & guide', hint: 'How to use every feature', to: '/help', icon: '?' },
     ],
   },
   {
@@ -42,6 +43,18 @@ const isActive = (location, to) => {
   if (location.pathname !== path) return false;
   const mode = new URLSearchParams(query).get('mode');
   return (new URLSearchParams(location.search).get('mode') || null) === mode;
+};
+
+// Which /help section the floating "?" button opens for the current page.
+const helpAnchorFor = ({ pathname, search }) => {
+  if (pathname.startsWith('/imagediff')) return 'results';
+  if (pathname === '/console') {
+    const mode = new URLSearchParams(search).get('mode');
+    return mode === 'quick' ? 'quick' : mode === 'figma' ? 'figma' : 'console';
+  }
+  return {
+    '/releases': 'releases', '/bc-agent': 'bc', '/manual-ios': 'manual-ios', '/runners': 'runners', '/': 'dashboard',
+  }[pathname] || 'start';
 };
 
 const AppShell = () => {
@@ -227,6 +240,16 @@ const AppShell = () => {
           <Outlet />
         </div>
       </div>
+      {location.pathname !== '/help' && (
+        <Link
+          to={`/help#${helpAnchorFor(location)}`}
+          title="How to use this page"
+          aria-label="Help for this page"
+          className="fixed bottom-4 right-28 z-[65] flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-base font-bold text-indigo-600 shadow-lg transition hover:bg-indigo-50 dark:border-gray-700 dark:bg-gray-900 dark:text-indigo-300"
+        >
+          ?
+        </Link>
+      )}
       <AskPanel />
     </div>
   );

@@ -15,6 +15,7 @@ const BcAgentPage = lazy(() => import('./pages/BcAgentPage'));
 const RunnersPage = lazy(() => import('./pages/RunnersPage'));
 const ReleasesPage = lazy(() => import('./pages/ReleasesPage'));
 const ImageDiffPage = lazy(() => import('./pages/ImageDiffPage'));
+const HelpPage = lazy(() => import('./pages/HelpPage'));
 
 const PageFallback = () => (
   <div className="p-8 text-sm text-gray-500">Loading…</div>
@@ -35,6 +36,7 @@ function App() {
               <Route path="/runners" element={<RunnersPage />} />
               <Route path="/releases" element={<ReleasesPage />} />
               <Route path="/imagediff/:directory" element={<ImageDiffPage />} />
+              <Route path="/help" element={<HelpPage />} />
             </Route>
           </Routes>
         </Suspense>
