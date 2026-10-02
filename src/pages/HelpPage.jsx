@@ -56,7 +56,7 @@ const SECTIONS = [
     title: 'Dashboard',
     body: (
       <>
-        <p>The home page shows the latest screenshot-diff and Brand Concierge runs, their pass rate, and every dataset grouped by product (Milo core, consumer, graybox, Marketo, custom).</p>
+        <p>The home page shows the latest screenshot-diff and Brand Concierge runs, their pass rate, and every dataset grouped by product (Milo core, consumer, Marketo, custom).</p>
         <p>Click a dataset card to open its latest results. Use <b>+ Add dataset</b> to register a new one — see <a href="#datasets">Datasets</a>.</p>
       </>
     ),

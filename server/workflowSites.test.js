@@ -19,6 +19,6 @@ test('site groups put unknown custom datasets in CUSTOM only', async () => {
   assert.ok(groups.MILOCORE.includes('milo'));
   assert.deepEqual(groups.CUSTOM, ['bacom-live-qa']);
   const all = allSites(['bacom-live-qa']);
-  assert.ok(all.includes('milo') && all.includes('graybox-cc') && all.includes('bacom-live-qa'));
+  assert.ok(all.includes('milo') && all.includes('cc') && !all.some((x) => x.startsWith('graybox')) && all.includes('bacom-live-qa'));
   assert.equal(new Set(all).size, all.length);
 });

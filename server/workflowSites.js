@@ -1,7 +1,6 @@
 export const BUILTIN_SITES = [
   'bacom', 'bacom-blog', 'cc', 'da-marketo', 'da-marketo-prod', 'dc',
-  'express', 'graybox-bacom', 'graybox-cc', 'graybox-dc', 'graybox-upp',
-  'homepage', 'uar',
+  'express', 'homepage', 'uar',
 ];
 
 export function screenshotSiteInputs(site) {
@@ -17,7 +16,6 @@ export function screenshotSiteInputs(site) {
 export const SITE_GROUPS = {
   MILOCORE: ['milo', 'caas', 'uar', 'feds'],
   CONSUMER: ['sot', 'homepage', 'dc', 'cc', 'bacom', 'bacom-blog', 'express'],
-  GRAYBOX: ['graybox-bacom', 'graybox-cc', 'graybox-dc', 'graybox-upp'],
   MARKETO: ['da-marketo', 'da-marketo-prod'],
 };
 
