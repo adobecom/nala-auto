@@ -23,6 +23,13 @@ const STATUS_STYLES = {
 const statusText = (status, conclusion) => (status === 'completed' ? conclusion || 'done' : status);const statusCls = (status, conclusion) =>
   STATUS_STYLES[statusText(status, conclusion)] || 'bg-slate-400 text-white';
 
+const fmtDuration = (ms) => {
+  if (!(ms > 0)) return '';
+  if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+  const m = Math.round(ms / 60000);
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+};
+
 const renderPill = (status, conclusion) => (
   <span
     className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${statusCls(status, conclusion)}`}
@@ -95,6 +102,8 @@ const RunConsolePage = () => {
   const [run, setRun] = useState(null);
   const [datasetInfo, setDatasetInfo] = useState(null);
   const [runs, setRuns] = useState([]);
+  // Last finished run time per dataset: { screenshot: { milo: { ms, at, conclusion } } }.
+  const [durations, setDurations] = useState({});
   // Only true while the POST is in flight: a live run elsewhere must not lock
   // the button for other datasets (the backend refuses true duplicates).
   const [submitting, setSubmitting] = useState(false);
@@ -142,8 +151,12 @@ const RunConsolePage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const refreshDurations = () => {
+    fetch('/lab/durations').then((r) => r.json()).then(setDurations).catch(() => {});
+  };
   const refreshRuns = () => {
     fetch('/lab/runs').then((r) => r.json()).then(setRuns).catch(() => {});
+    refreshDurations();
   };
 
   const closeStream = () => {
@@ -195,6 +208,7 @@ const RunConsolePage = () => {
 
   // On load, rediscover runs so a page refresh reconnects to an in-flight run.
   useEffect(() => {
+    refreshDurations();
     fetch('/lab/runs')
       .then((r) => r.json())
       .then((list) => {
@@ -374,6 +388,12 @@ const RunConsolePage = () => {
   const retention = { datasetKeepRuns: 3, datasetMaxDays: 7, oneOffMaxHours: 24, ...(config?.retention || {}) };
 
   const isMock = config?.mode !== 'live';
+  const durationKind = kind === 'ios' ? 'ios' : 'screenshot';
+  const lastDuration = durations[durationKind]?.[site];
+  const siteOptionLabel = (s) => {
+    const d = durations[durationKind]?.[s];
+    return d ? `${s} · last ${fmtDuration(d.ms)}` : s;
+  };
   const pacificTime = (timestamp) =>
     timestamp
       ? new Intl.DateTimeFormat('en-US', {
@@ -572,15 +592,21 @@ const RunConsolePage = () => {
                   {config?.groups
                     ? Object.entries(config.groups).filter(([, list]) => list.length).map(([g, list]) => (
                       <optgroup key={g} label={g}>
-                        {list.map((s) => <option key={s} value={s}>{s}</option>)}
+                        {list.map((s) => <option key={s} value={s}>{siteOptionLabel(s)}</option>)}
                       </optgroup>
                     ))
                     : (config?.sites || []).map((s) => (
                       <option key={s} value={s}>
-                        {s}
+                        {siteOptionLabel(s)}
                       </option>
                     ))}
                 </select>
+                {lastDuration && (
+                  <span className={`mt-1 block text-xs ${subtle}`} title={`Run #${lastDuration.runId || '?'} · ${lastDuration.conclusion}`}>
+                    ⏱ Last run took <span className="font-semibold">{fmtDuration(lastDuration.ms)}</span>
+                    {' '}· {pacificTime(lastDuration.at)}
+                  </span>
+                )}
               </label>
               )}
               <label className="block">
@@ -762,6 +788,10 @@ const RunConsolePage = () => {
                     <span className={text}>{runLabel(r)}</span>
                     <span className={`${subtle} truncate`}>{r.site}</span>
                     {r.startedAt && <span className={`text-xs ${subtle}`}>{pacificTime(r.startedAt)}</span>}
+                    {r.done && r.finishedAt && <span className={`text-xs ${subtle}`}>took {fmtDuration(r.finishedAt - r.startedAt)}</span>}
+                    {!r.done && durations[r.runKind]?.[r.site] && (
+                      <span className={`text-xs ${subtle}`}>last took {fmtDuration(durations[r.runKind][r.site].ms)}</span>
+                    )}
                     {r.history?.state === 'pending' && <span className={`text-xs ${subtle}`}>scoring…</span>}
                     {r.history?.state === 'ready' && (
                       <span

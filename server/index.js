@@ -16,6 +16,7 @@ import { manualSessionConfig, createManualSession, endManualSession } from './ma
 import * as aiJudge from './aiJudge.js';
 import * as askAgent from './askAgent.js';
 import { getRunnerStatus } from './runnerStatus.js';
+import { backfillDurations, getDurations, recordDuration } from './runDurations.js';
 import { getReleasePrs, releaseRepos } from './releasePrs.js';
 import { getThumbnail, isSafeScreenshotPath, CACHE_CONTROL } from './thumbnails.js';
 
@@ -325,6 +326,9 @@ const server = http.createServer(async (req, res) => {
 
     // Finished screenshot runs carry their baseline counts (new / changed /
     // fixed) so Recent runs can flag regressions without opening the viewer.
+    if (p === '/lab/durations' && req.method === 'GET') {
+      return send(res, 200, getDurations());
+    }
     if (p === '/lab/runs' && req.method === 'GET') {
       const list = listRuns();
       await Promise.all(list.map(async (run) => {
@@ -376,6 +380,10 @@ const server = http.createServer(async (req, res) => {
 // Score a finished run once its results are published (the workflow's
 // publish step lands a few seconds after the GitHub run completes).
 onRunFinished((run) => {
+  recordDuration({
+    kind: run.runKind, site: run.site, runId: run.runId,
+    startedAt: run.startedAt, finishedAt: run.finishedAt, conclusion: run.conclusion,
+  });
   if (run.runKind !== 'screenshot' || run.mode !== 'live' || !history.isSafeName(run.site)) return;
   setTimeout(() => history.ensureMetrics(run.site, run.runId).catch((e) => {
     console.warn(`[nala-lab] history: ${run.site}/${run.runId} not scored:`, e.message);
@@ -387,6 +395,8 @@ wss.on('connection', (ws, req) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   attachClient(url.searchParams.get('runId'), ws);
 });
+
+backfillDurations(listRuns(100), gh.isLive() ? gh.getRun : null).catch(() => {});
 
 server.listen(PORT, () => {
   console.log(`[nala-lab] backend on http://localhost:${PORT}  mode=${gh.isLive() ? 'LIVE' : 'MOCK'}`);

@@ -36,3 +36,4 @@ server/.history/
 
 # Server-side screenshot thumbnail cache (runtime only)
 server/.thumb-cache/
+server/.run-durations.json

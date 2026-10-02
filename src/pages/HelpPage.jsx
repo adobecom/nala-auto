@@ -81,6 +81,7 @@ const SECTIONS = [
           'When it finishes, click the run to open the results.',
         ]}
         />
+        <p>The dataset dropdown shows how long the last run of each dataset took (<i>milo · last 18m</i>), so you can plan around long runs.</p>
         <p>Recent runs show baseline badges (<i>changed / new / missing / flaky</i>) once scoring finishes — usually within a minute of the run ending.</p>
         <Tip>“Mock mode” in the console means the backend has no GitHub token and runs are simulated. Production is always live.</Tip>
       </>

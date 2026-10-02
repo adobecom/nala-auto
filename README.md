@@ -51,6 +51,10 @@ Every dataset is a sheet at
 one, the server checks that the sheet exists (`GET /lab/datasets/<name>`). The
 console then previews it: page count, sample rows, and invalid or ignored rows.
 
+The server records each dataset's last finished run time (`GET /lab/durations`,
+stored in `server/.run-durations.json`), and the dataset dropdown shows it, for
+example `milo · last 18m`. On startup it backfills from recent runs.
+
 Optional sheet columns, read by the fork's `load-data.js`, help with flaky pages:
 
 | Column | Example | Effect |

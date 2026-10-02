@@ -32,7 +32,7 @@ const STATE_FILE =
   path.join(path.dirname(fileURLToPath(import.meta.url)), '.runs.json');
 const PLAIN_FIELDS = [
   'id', 'kind', 'site', 'milolibs', 'device', 'devices', 'iosVersions', 'maxUrls',
-  'mode', 'startedAt', 'ghRunId', 'htmlUrl', 'status', 'conclusion', 'note', 'jobs',
+  'mode', 'startedAt', 'finishedAt', 'ghRunId', 'htmlUrl', 'status', 'conclusion', 'note', 'jobs',
   'resultsUrl', 'latestResultsUrl', 'done', 'urls', 'viewports', 'figmaUrl', 'figmaFileKey', 'figmaNodeId', 'selector',
 ];
 
@@ -126,6 +126,7 @@ function makeRun(f) {
         latestResultsUrl: this.latestResultsUrl,
         done: this.done,
         startedAt: this.startedAt,
+        finishedAt: this.finishedAt,
       };
     },
   };
@@ -271,6 +272,7 @@ export function onRunFinished(fn) {
 
 function finish(run, conclusion) {
   run.done = true;
+  run.finishedAt = Date.now();
   if (conclusion) run.conclusion = conclusion;
   if (run.status !== 'error') run.status = 'completed';
   push(run);
