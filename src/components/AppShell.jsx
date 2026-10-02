@@ -115,8 +115,21 @@ const AppShell = () => {
 
   const nav = (compact) => (
     <nav className="flex h-full flex-col overflow-y-auto p-3" aria-label="Main navigation">
-      <div className={`mb-2 flex items-center ${compact ? 'justify-center' : 'justify-between'} gap-2`}>
-        {!compact && <span className="px-2 text-sm font-bold tracking-tight">Nala Auto</span>}
+      <div className={`mb-2 flex items-center ${compact ? 'flex-col justify-center' : 'justify-between'} gap-2`}>
+        <Link
+          to="/"
+          className={`group flex items-center gap-2.5 rounded-lg ${compact ? 'p-1' : 'px-1.5 py-1'} ${dark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
+          title="Nala Auto — home"
+          aria-label="Nala Auto home"
+        >
+          <img src="/logo.svg" alt="" className="h-8 w-8 shrink-0 rounded-lg shadow-sm shadow-indigo-500/30 transition-transform group-hover:scale-105" />
+          {!compact && (
+            <span className="flex flex-col leading-tight">
+              <span className="bg-gradient-to-r from-indigo-600 to-purple-500 bg-clip-text text-[15px] font-extrabold tracking-tight text-transparent">Nala Auto</span>
+              <span className={`text-[10px] font-medium ${dark ? 'text-gray-500' : 'text-gray-400'}`}>Visual checks for Milo</span>
+            </span>
+          )}
+        </Link>
         <button
           type="button"
           onClick={() => setCollapsed((value) => !value)}
