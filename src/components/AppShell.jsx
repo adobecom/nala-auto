@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { fetchCustomDatasets, CUSTOM_DATASETS_EVENT } from '../lib/customDatasets';
 import { SITE_GROUPS } from '../lib/sites';
+import { useSiteGroups } from '../lib/useSiteGroups';
 import { runState, styleFor, useBcSummary, useLabRuns } from '../lib/labRuns';
 import AskPanel from './AskPanel';
 
@@ -49,7 +49,6 @@ const AppShell = () => {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('navCollapsed') === '1');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark');
-  const [customDatasets, setCustomDatasets] = useState([]);
   const [openGroups, setOpenGroups] = useState(() => {
     const site = location.pathname.match(/^\/imagediff\/([^/]+)/)?.[1];
     const group = Object.entries(SITE_GROUPS).find(([, sites]) => sites.includes(site))?.[0];
@@ -71,13 +70,6 @@ const AppShell = () => {
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    const refresh = () => fetchCustomDatasets().then(setCustomDatasets);
-    refresh();
-    window.addEventListener(CUSTOM_DATASETS_EVENT, refresh);
-    return () => window.removeEventListener(CUSTOM_DATASETS_EVENT, refresh);
-  }, []);
-
   const { runs } = useLabRuns();
   const latest = useMemo(() => ({
     bc: runs.find((run) => run.runKind === 'bc'),
@@ -95,10 +87,7 @@ const AppShell = () => {
     return state ? { state, title: `Latest run ${run.runId}: ${state}` } : null;
   };
 
-  const groups = useMemo(
-    () => (customDatasets.length ? { ...SITE_GROUPS, CUSTOM: customDatasets } : SITE_GROUPS),
-    [customDatasets],
-  );
+  const groups = useSiteGroups();
 
   const shell = dark ? 'bg-gray-950 border-gray-800 text-gray-200' : 'bg-white border-gray-200 text-gray-700';
   const item = (active) => `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${

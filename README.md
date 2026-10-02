@@ -44,6 +44,39 @@ Results are viewed at `/imagediff/<site>` (latest) or
 upstream: dataset runs keep the newest 3 for up to 7 days, and quick / Figma runs
 last 24 hours.
 
+### Datasets
+
+Every dataset is a sheet at
+`https://milo.adobe.com/drafts/nala/screenshotdiff/data/<name>.json`. When you add
+one, the server checks that the sheet exists (`GET /lab/datasets/<name>`). The
+console then previews it: page count, sample rows, and invalid or ignored rows.
+
+Optional sheet columns, read by the fork's `load-data.js`, help with flaky pages:
+
+| Column | Example | Effect |
+| --- | --- | --- |
+| `waitStrategy` | `footer` / `scroll` | Wait mode for this page. `footer` is the default. `scroll` adds a slow scroll plus networkidle, for lazy-loaded sections. |
+| `mask` | `.carousel; #ad-slot` | CSS selectors, separated by `;` or newlines, that are painted over in the screenshot (for dynamic content). |
+| `ignore` | `yes` / `x` / `1` | Skip the row without deleting it. |
+
+### Baseline and trend
+
+After each live dataset run, the server scores every page (`server/visualHistory.js`).
+It compares each page against the **accepted baseline**, or the previous run if no baseline has been accepted. Each page is marked `changed`, `new`, `missing` or `same`. A page is also marked `flaky` when its diff % keeps jumping across the last 10 runs.
+
+Where this shows up:
+
+- `/imagediff/<site>` shows a summary bar with a trend sparkline. **Accept run as baseline** applies to every page; **✓ Accept** applies to one page. **Changed since baseline** filters the page list.
+- The console's recent runs show the same counts as badges.
+
+History is stored in `server/.history/<site>/`. Override the location with `HISTORY_DIR`. Older runs are backfilled at startup; set `HISTORY_BACKFILL=0` to skip that.
+
+API:
+
+- `GET /lab/history/run?site=&run=`
+- `GET /lab/history/trend?site=`
+- `POST /lab/history/baseline {site, runId, keys?}` or `{site, reset: true}`
+
 ## Runners
 
 `/runners` (backed by `GET /lab/runners`) shows the self-hosted Mac mini pool:
@@ -83,6 +116,20 @@ Data comes from `GET /lab/releases` (`server/releasePrs.js`). Responses are cach
 
 - `GITHUB_TOKEN` is optional because milo is public, but it avoids the low unauthenticated rate limit.
 - `RELEASE_REPO` (default `adobecom/milo`) and `RELEASE_TITLE` (default `[Release] Stage to Main`) override the target.
+
+### Visual diff for any repo
+
+Each repo is mapped to the datasets that cover it. For example, `adobecom/milo` maps to `milo`. You can edit the mapping on `/releases`, or with `PUT /lab/repo-datasets {repo, datasets}`. Overrides are saved in `server/.repo-datasets.json`.
+
+**Run visual diff** starts one live run per mapped dataset. Other repos can trigger the same thing from CI:
+
+```sh
+curl -X POST https://nala-auto.corp.adobe.com/lab/repo-runs \
+  -H 'Content-Type: application/json' \
+  -d '{"repo":"adobecom/da-bacom","milolibs":"stage"}'
+```
+
+The response is `{repo, runs:[{runId, site, resultsUrl}], errors}`.
 
 ## AI Judge
 

@@ -114,6 +114,117 @@ Signoffs.propTypes = {
   isDarkMode: PropTypes.bool.isRequired,
 };
 
+// Datasets mapped to a repo + one-click live visual diff of all of them.
+function VisualDiffPanel({ repo, datasets, onSaved, card, subtle }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  useEffect(() => {
+    setResult(null);
+    setEditing(false);
+  }, [repo]);
+
+  const run = async () => {
+    setBusy(true);
+    setResult(null);
+    try {
+      const res = await fetch('/lab/repo-runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo }),
+      });
+      const body = await res.json().catch(() => ({}));
+      setResult(res.ok || res.status === 409 ? body : { runs: [], errors: [{ site: '', error: body.error || `HTTP ${res.status}` }] });
+    } catch (e) {
+      setResult({ runs: [], errors: [{ site: '', error: String(e.message || e) }] });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const save = async () => {
+    const list = draft.split(/[\s,]+/).map((d) => d.trim()).filter(Boolean);
+    const res = await fetch('/lab/repo-datasets', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo, datasets: list }),
+    });
+    if (res.ok) {
+      setEditing(false);
+      onSaved();
+    }
+  };
+
+  return (
+    <section className={`space-y-2 rounded-xl border p-4 text-sm shadow-sm ${card}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-semibold">Visual diff</span>
+          {datasets.length ? datasets.map((d) => (
+            <a
+              key={d}
+              href={`/console?site=${encodeURIComponent(d)}`}
+              className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700 hover:underline dark:bg-indigo-900/40 dark:text-indigo-300"
+            >
+              {d}
+            </a>
+          )) : <span className={subtle}>no datasets mapped to {repo}</span>}
+          <button
+            type="button"
+            className={`text-xs ${subtle} hover:underline`}
+            onClick={() => { setDraft(datasets.join(', ')); setEditing((v) => !v); }}
+          >
+            {editing ? 'cancel' : 'edit'}
+          </button>
+        </div>
+        <button
+          type="button"
+          disabled={busy || !datasets.length}
+          onClick={run}
+          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          title="Screenshot every mapped dataset (live) and compare against its baseline"
+        >
+          {busy ? 'Starting…' : 'Run visual diff'}
+        </button>
+      </div>
+      {editing && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="dataset names, comma separated (e.g. milo, bacom)"
+            className="min-w-[16rem] flex-1 rounded border px-2 py-1 text-sm text-gray-900"
+          />
+          <button type="button" onClick={save} className="rounded border px-2 py-1 text-sm hover:opacity-80">Save</button>
+        </div>
+      )}
+      {result && (
+        <ul className="space-y-0.5">
+          {result.runs?.map((r) => (
+            <li key={r.runId}>
+              ✓ {r.site} started ·{' '}
+              <a className="text-indigo-600 hover:underline dark:text-indigo-400" href={`/console?site=${encodeURIComponent(r.site)}`}>console</a>
+            </li>
+          ))}
+          {result.errors?.map((e) => (
+            <li key={e.site || e.error} className="text-red-600 dark:text-red-400">✕ {e.site ? `${e.site}: ` : ''}{e.error}</li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+VisualDiffPanel.propTypes = {
+  repo: PropTypes.string.isRequired,
+  datasets: PropTypes.arrayOf(PropTypes.string).isRequired,
+  onSaved: PropTypes.func.isRequired,
+  card: PropTypes.string.isRequired,
+  subtle: PropTypes.string.isRequired,
+};
+
 export default function ReleasesPage() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeMenu, setActiveMenu] = useState('MILOCORE');
@@ -125,12 +236,14 @@ export default function ReleasesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const repo = searchParams.get('repo') || repos[0]?.id || '';
 
-  useEffect(() => {
+  const loadRepos = useCallback(() => {
     fetch('/lab/releases/repos', { cache: 'no-store' })
       .then((r) => r.json())
       .then((body) => setRepos(body.repos || []))
       .catch(() => setRepos([]));
   }, []);
+  useEffect(loadRepos, [loadRepos]);
+  const repoDatasets = repos.find((r) => r.id === repo)?.datasets || [];
 
   const refresh = useCallback(async (force = false) => {
     setLoading(true);
@@ -236,6 +349,10 @@ export default function ReleasesPage() {
               </button>
             ))}
           </div>
+        )}
+
+        {repo && (
+          <VisualDiffPanel repo={repo} datasets={repoDatasets} onSaved={loadRepos} card={card} subtle={subtle} />
         )}
 
         {error && (

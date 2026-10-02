@@ -8,7 +8,7 @@ import {
   removeCustomDataset,
   CUSTOM_DATASETS_EVENT,
 } from '../lib/customDatasets';
-import { SITE_GROUPS } from '../lib/sites';
+import { useSiteGroups } from '../lib/useSiteGroups';
 import {
   resultsHref,
   runState,
@@ -67,6 +67,8 @@ const HomePage = () => {
   const [newDatasetName, setNewDatasetName] = useState('');
   const [addError, setAddError] = useState('');
   const [adding, setAdding] = useState(false);
+  const [missingSheet, setMissingSheet] = useState(null);
+  const siteGroups = useSiteGroups();
   const { runs, loaded, error: runsError } = useLabRuns();
 
   useEffect(() => {
@@ -89,7 +91,12 @@ const HomePage = () => {
     };
   }, []);
 
-  const groups = useMemo(() => ({ ...SITE_GROUPS, CUSTOM: customDatasets }), [customDatasets]);
+  // Server groups (shared with header/sidebar/console); CUSTOM stays as a tab
+  // even when empty so "+ Add dataset" has somewhere to land.
+  const groups = useMemo(
+    () => ({ ...siteGroups, CUSTOM: siteGroups.CUSTOM || customDatasets.filter((s) => !Object.values(siteGroups).flat().includes(s)) }),
+    [siteGroups, customDatasets],
+  );
 
   const lastRunBySite = useMemo(() => {
     const map = {};
@@ -118,20 +125,26 @@ const HomePage = () => {
     return q ? entries.filter(({ site }) => site.includes(q)) : entries;
   }, [filter, group, groups]);
 
-  const handleAddDataset = async (e) => {
-    e.preventDefault();
+  const addDataset = async (force) => {
     setAdding(true);
-    const name = await addCustomDataset(newDatasetName);
+    const { name, error, dataset } = await addCustomDataset(newDatasetName, { force });
     setAdding(false);
     if (!name) {
-      setAddError('Enter a valid dataset name (letters, numbers, hyphens).');
+      setAddError(error);
+      setMissingSheet(dataset && !dataset.exists ? dataset : null);
       return;
     }
+    setMissingSheet(null);
     setCustomDatasets(await fetchCustomDatasets());
     setNewDatasetName('');
     setAddError('');
     setShowAddForm(false);
     setGroup('CUSTOM');
+  };
+
+  const handleAddDataset = (e) => {
+    e.preventDefault();
+    addDataset(false);
   };
 
   const handleRemoveDataset = async (name) => {
@@ -307,6 +320,7 @@ const HomePage = () => {
                 onChange={(e) => {
                   setNewDatasetName(e.target.value);
                   setAddError('');
+                  setMissingSheet(null);
                 }}
                 placeholder="dataset name, e.g. bacom-live-qa2"
                 className={`min-w-[200px] flex-1 rounded-lg border px-3 py-2 text-sm ${dark ? 'border-gray-700 bg-gray-800 text-gray-100' : 'border-gray-300 bg-white text-gray-900'}`}
@@ -320,12 +334,25 @@ const HomePage = () => {
                   setShowAddForm(false);
                   setNewDatasetName('');
                   setAddError('');
+                  setMissingSheet(null);
                 }}
                 className={`rounded-lg px-4 py-2 text-sm font-medium ${dark ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}
               >
                 Cancel
               </button>
-              {addError && <div className="w-full text-xs text-red-500">{addError}</div>}
+              {addError && (
+                <div className="flex w-full flex-wrap items-center gap-2 text-xs text-red-500">
+                  <span>{addError}</span>
+                  {missingSheet && (
+                    <>
+                      <a href={missingSheet.url} target="_blank" rel="noreferrer" className="underline">Open sheet URL</a>
+                      <button type="button" disabled={adding} onClick={() => addDataset(true)} className="rounded border border-red-400 px-2 py-0.5 font-medium hover:bg-red-50 dark:hover:bg-red-950">
+                        Add anyway
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
               <div className={`w-full text-xs ${subtle}`}>
                 Shared with everyone. The baseline URL list lives at{' '}
                 <code>https://milo.adobe.com/drafts/nala/screenshotdiff/data/&#123;name&#125;.json</code>; run it once from the console to get results.

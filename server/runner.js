@@ -260,11 +260,25 @@ function push(run) {
   }
 }
 
+const finishListeners = new Set();
+
+// index.js hooks this to score finished screenshot runs against the baseline
+// (visualHistory.js) without runner.js importing the image pipeline.
+export function onRunFinished(fn) {
+  finishListeners.add(fn);
+  return () => finishListeners.delete(fn);
+}
+
 function finish(run, conclusion) {
   run.done = true;
   if (conclusion) run.conclusion = conclusion;
   if (run.status !== 'error') run.status = 'completed';
   push(run);
+  for (const fn of finishListeners) {
+    try {
+      fn(run.snapshot());
+    } catch { /* listeners must never break a run */ }
+  }
 }
 
 export function inputsFor(run) {

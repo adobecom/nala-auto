@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import Sparkline from './Sparkline';
+import { STATUS_STYLE } from '../lib/visualHistory';
 
 const HOST = 'https://s3-sj3.corp.adobe.com/milo';
 
@@ -538,7 +540,7 @@ const deviceLabel = (b) => {
   return `Desktop ${b.charAt(0).toUpperCase()}${b.slice(1)}`;
 };
 
-const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
+const ImageDiff = ({ data, timestamp, isDarkMode: dark, history = null, onAcceptBaseline }) => {
   const allSnapshots = useMemo(() => {
     const list = [];
     Object.entries(data).forEach(([category, comparisons]) => {
@@ -564,6 +566,12 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
   const diffCount = useMemo(() => allSnapshots.filter((s) => s.hasDiff).length, [allSnapshots]);
 
   const [showOnlyDiff, setShowOnlyDiff] = useState(true);
+  const [changedOnly, setChangedOnly] = useState(false);
+  const historyOf = (snap) => history?.entries?.[snap.id] || null;
+  const changedCount = useMemo(
+    () => (history ? Object.values(history.entries || {}).filter((e) => e.status === 'changed' || e.status === 'new').length : 0),
+    [history],
+  );
   const [activeBrowser, setActiveBrowser] = useState(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [viewMode, setViewMode] = useState('split');
@@ -605,14 +613,18 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
       allSnapshots.filter((s) => {
         if (showOnlyDiff && !s.hasDiff) return false;
         if (activeBrowser && s.browser !== activeBrowser) return false;
+        if (changedOnly && history) {
+          const st = history.entries?.[s.id]?.status;
+          if (st !== 'changed' && st !== 'new') return false;
+        }
         return true;
       }),
-    [allSnapshots, showOnlyDiff, activeBrowser],
+    [allSnapshots, showOnlyDiff, activeBrowser, changedOnly, history],
   );
 
   useEffect(() => {
     setActiveIdx(0);
-  }, [showOnlyDiff, activeBrowser]);
+  }, [showOnlyDiff, activeBrowser, changedOnly]);
 
   // If the diff-only filter leaves nothing, fall back to showing all
   useEffect(() => {
@@ -874,6 +886,17 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
             />
             Show diffs only
           </label>
+          {history && (
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none" title="Pages whose diff moved vs the accepted baseline (or the previous run)">
+              <input
+                type="checkbox"
+                checked={changedOnly}
+                onChange={(e) => setChangedOnly(e.target.checked)}
+                className="rounded"
+              />
+              Changed since baseline ({changedCount})
+            </label>
+          )}
 
           {browsers.length > 1 && (
             <div>
@@ -943,6 +966,19 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
                   {snap.hasDiff && (
                     <span className="inline-block mt-0.5 text-xs bg-red-100 text-red-600 px-1.5 rounded-full">
                       diff
+                    </span>
+                  )}
+                  {historyOf(snap) && STATUS_STYLE[historyOf(snap).status] && (
+                    <span
+                      className={`inline-block mt-0.5 ml-1 text-xs px-1.5 rounded-full ${STATUS_STYLE[historyOf(snap).status].cls}`}
+                      title={historyOf(snap).refDiffPct != null ? `${historyOf(snap).refDiffPct}% → ${historyOf(snap).diffPct}% (vs ${historyOf(snap).refKind})` : undefined}
+                    >
+                      {STATUS_STYLE[historyOf(snap).status].label}
+                    </span>
+                  )}
+                  {historyOf(snap)?.flaky && (
+                    <span className="inline-block mt-0.5 ml-1 text-xs px-1.5 rounded-full bg-gray-200 text-gray-600" title="Diff % keeps jumping between runs">
+                      flaky
                     </span>
                   )}
                 </div>
@@ -1102,6 +1138,26 @@ const ImageDiff = ({ data, timestamp, isDarkMode: dark }) => {
               >
                 {aiJudging ? '🤖 Judging…' : '🤖 AI Judge'}
               </button>
+              {active && historyOf(active) && (
+                <span className="flex flex-shrink-0 items-center gap-1 ml-1 text-xs text-gray-500">
+                  <span title="Diff % of this page">{historyOf(active).diffPct ?? '–'}%</span>
+                  <Sparkline
+                    className="text-indigo-500"
+                    width={60}
+                    values={history.series?.[active.id] || []}
+                    title={`Diff % over the last ${history.trendRuns?.length || 0} runs`}
+                  />
+                  {onAcceptBaseline && historyOf(active).status !== 'unchanged' && historyOf(active).status !== 'error' && (
+                    <button
+                      onClick={() => onAcceptBaseline([active.id])}
+                      className={`text-xs px-2 py-px rounded-md border font-medium ${dark ? 'border-emerald-500/60 text-emerald-300 hover:bg-emerald-500/20' : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'}`}
+                      title="Make this page's current state the expected one"
+                    >
+                      ✓ Accept
+                    </button>
+                  )}
+                </span>
+              )}
             </div>
 
             {/* AI judge result banner */}

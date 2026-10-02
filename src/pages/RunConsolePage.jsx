@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Header from '../components/Header';
 import Breadcrumb from '../components/Breadcrumb';
+import { fetchDatasetInfo } from '../lib/customDatasets';
 
 // Explicit status colors so pills read clearly in both light and dark —
 // the app toggles a `.dark` class rather than DaisyUI's data-theme, so we
@@ -92,6 +93,7 @@ const RunConsolePage = () => {
   const [selDevices, setSelDevices] = useState(['iPhone 15']);
   const [selVersions, setSelVersions] = useState(['18.3']);
   const [run, setRun] = useState(null);
+  const [datasetInfo, setDatasetInfo] = useState(null);
   const [runs, setRuns] = useState([]);
   // Only true while the POST is in flight: a live run elsewhere must not lock
   // the button for other datasets (the backend refuses true duplicates).
@@ -344,6 +346,20 @@ const RunConsolePage = () => {
 
   const viewportLabel = (v) => (config?.viewportLabels || { chrome: 'Desktop', ipad: 'Tablet', iphone: 'Mobile' })[v] || v;
 
+  // Preview of the dataset sheet the screenshot workflow will load.
+  useEffect(() => {
+    if (kind !== 'screenshot' || !site) return undefined;
+    let alive = true;
+    setDatasetInfo({ loading: true, name: site });
+    fetchDatasetInfo(site).then((info) => { if (alive) setDatasetInfo(info); });
+    return () => { alive = false; };
+  }, [kind, site]);
+
+  const refreshDatasetInfo = () => {
+    setDatasetInfo({ loading: true, name: site });
+    fetchDatasetInfo(site, { refresh: true }).then(setDatasetInfo);
+  };
+
   // One-line description of a run, used by both Recent runs and the live panel.
   const runLabel = (r) => {
     if (r.runKind === 'ios') return `iOS · ${(r.devices || [r.device]).filter(Boolean).join(', ')}`;
@@ -553,11 +569,17 @@ const RunConsolePage = () => {
                   value={site}
                   onChange={(e) => setSite(e.target.value)}
                 >
-                  {(config?.sites || []).map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
+                  {config?.groups
+                    ? Object.entries(config.groups).filter(([, list]) => list.length).map(([g, list]) => (
+                      <optgroup key={g} label={g}>
+                        {list.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </optgroup>
+                    ))
+                    : (config?.sites || []).map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
                 </select>
               </label>
               )}
@@ -571,6 +593,50 @@ const RunConsolePage = () => {
                 />
               </label>
             </div>
+
+            {kind === 'screenshot' && datasetInfo && (
+              <div className={`rounded-lg border px-3 py-2 text-xs ${isDarkMode ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}`}>
+                {datasetInfo.loading ? (
+                  <span className={subtle}>Checking dataset sheet…</span>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`font-semibold ${datasetInfo.exists ? 'text-emerald-600' : datasetInfo.fallback ? subtle : 'text-amber-600'}`}>
+                        {datasetInfo.exists ? `✓ ${datasetInfo.pages} pages` : datasetInfo.fallback ? 'Repo yml' : '⚠ No published sheet'}
+                      </span>
+                      {datasetInfo.exists && (
+                        <span className={subtle}>
+                          wait: {datasetInfo.waitStrategy || 'default'}
+                          {datasetInfo.ignored ? ` · ${datasetInfo.ignored} ignored` : ''}
+                          {datasetInfo.pairMode ? ` · ${datasetInfo.pairMode} A|B pairs` : ''}
+                          {datasetInfo.withOptions ? ` · ${datasetInfo.withOptions} with mask/wait` : ''}
+                          {datasetInfo.invalid ? ` · ${datasetInfo.invalid} invalid rows` : ''}
+                        </span>
+                      )}
+                      {datasetInfo.url && (
+                        <a href={datasetInfo.url} target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">
+                          sheet ↗
+                        </a>
+                      )}
+                      <button type="button" onClick={refreshDatasetInfo} className="ml-auto text-indigo-500 hover:underline">
+                        Refresh
+                      </button>
+                    </div>
+                    {datasetInfo.message && <div className={`mt-1 ${subtle}`}>{datasetInfo.message}</div>}
+                    {datasetInfo.sample?.length > 0 && (
+                      <ul className={`mt-1 space-y-0.5 font-mono ${subtle}`}>
+                        {datasetInfo.sample.map((row) => (
+                          <li key={row.key} className="truncate" title={row.a}>
+                            {row.key}: {row.a}{row.b ? ` | ${row.b}` : ''}
+                          </li>
+                        ))}
+                        {datasetInfo.pages > datasetInfo.sample.length && <li>… {datasetInfo.pages - datasetInfo.sample.length} more</li>}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
             {kind === 'figma' ? null : kind === 'quick' ? (
               <div>
@@ -696,6 +762,21 @@ const RunConsolePage = () => {
                     <span className={text}>{runLabel(r)}</span>
                     <span className={`${subtle} truncate`}>{r.site}</span>
                     {r.startedAt && <span className={`text-xs ${subtle}`}>{pacificTime(r.startedAt)}</span>}
+                    {r.history?.state === 'pending' && <span className={`text-xs ${subtle}`}>scoring…</span>}
+                    {r.history?.state === 'ready' && (
+                      <span
+                        className="flex gap-1 text-xs"
+                        title={`vs baseline / previous run${r.history.previousRunId ? ` #${r.history.previousRunId}` : ''}`}
+                      >
+                        {r.history.counts.changed > 0 && <span className="rounded bg-amber-500/15 px-1.5 text-amber-600">{r.history.counts.changed} changed</span>}
+                        {r.history.counts.new > 0 && <span className="rounded bg-sky-500/15 px-1.5 text-sky-600">{r.history.counts.new} new</span>}
+                        {r.history.counts.missing > 0 && <span className="rounded bg-rose-500/15 px-1.5 text-rose-600">{r.history.counts.missing} missing</span>}
+                        {r.history.counts.flaky > 0 && <span className="rounded bg-gray-500/15 px-1.5">{r.history.counts.flaky} flaky</span>}
+                        {!r.history.counts.changed && !r.history.counts.new && !r.history.counts.missing && (
+                          <span className="rounded bg-emerald-500/15 px-1.5 text-emerald-600">no change</span>
+                        )}
+                      </span>
+                    )}
                     {!r.done && <span className="ml-auto text-xs font-semibold text-sky-500">● live</span>}
                   </button>
                 ))}

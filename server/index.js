@@ -5,9 +5,12 @@
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import * as gh from './github.js';
-import { createRun, getRun, attachClient, listRuns } from './runner.js';
-import { getCustomSites, addCustomSite, removeCustomSite } from './customSites.js';
-import { BUILTIN_SITES } from './workflowSites.js';
+import { createRun, getRun, attachClient, listRuns, onRunFinished } from './runner.js';
+import { getCustomSites, addCustomSite, removeCustomSite, normalizeSiteName } from './customSites.js';
+import { BUILTIN_SITES, allSites, siteGroups } from './workflowSites.js';
+import { inspectDataset } from './datasets.js';
+import { repoDatasets, datasetsForRepo, setRepoDatasets, normalizeRepo } from './repoDatasets.js';
+import * as history from './visualHistory.js';
 import { manualSessionConfig, createManualSession, endManualSession } from './manualSessions.js';
 import * as aiJudge from './aiJudge.js';
 import * as askAgent from './askAgent.js';
@@ -65,7 +68,8 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, {
         mode: gh.isLive() ? 'live' : 'mock',
         ...gh.config(),
-        sites: [...BUILTIN_SITES, ...getCustomSites().filter((s) => !BUILTIN_SITES.includes(s))],
+        sites: allSites(getCustomSites()),
+        groups: siteGroups(getCustomSites()),
         customSites: getCustomSites(),
         shards: ['chrome', 'ipad', 'iphone'],
         // Human names for the three viewport shards, used by the Figma compare
@@ -123,6 +127,8 @@ const server = http.createServer(async (req, res) => {
       }
       try {
         const result = await aiJudge.judgeDiff({ a, b, diff, regions });
+        // Remembered per run so the baseline report can show the verdict.
+        history.recordJudgment(a, result).catch(() => {});
         return send(res, 200, { configured: true, ...result });
       } catch (e) {
         return send(res, 502, { configured: true, error: String(e.message || e) });
@@ -153,14 +159,98 @@ const server = http.createServer(async (req, res) => {
     // A site added here still needs to be run once (▶ Run Console) before
     // its screenshot-diff results exist to view.
     if (p === '/lab/sites' && req.method === 'GET') {
-      return send(res, 200, { sites: getCustomSites() });
+      return send(res, 200, { sites: getCustomSites(), groups: siteGroups(getCustomSites()) });
     }
 
+    // Adding checks the dataset sheet is actually published first (a typo or
+    // an unpublished sheet would otherwise only fail minutes into a run).
+    // `force: true` adds it anyway, e.g. while the sheet is still being made.
     if (p === '/lab/sites' && req.method === 'POST') {
-      const { name } = await readBody(req);
-      const added = addCustomSite(name);
-      if (!added) return send(res, 400, { error: 'invalid site name' });
-      return send(res, 200, { site: added, sites: getCustomSites() });
+      const { name, force } = await readBody(req);
+      const normalized = normalizeSiteName(name);
+      if (!normalized) return send(res, 400, { error: 'invalid site name' });
+      const dataset = await inspectDataset(normalized, { force: true });
+      if (!dataset.exists && !force) {
+        return send(res, 422, { error: dataset.message, dataset });
+      }
+      const added = addCustomSite(normalized);
+      return send(res, 200, { site: added, sites: getCustomSites(), groups: siteGroups(getCustomSites()), dataset });
+    }
+
+    // Dataset preview: page count, wait strategy and first URLs of the sheet
+    // the workflow will load. Built-in sites without a sheet fall back to the
+    // committed sot.<site>.yml in the milo repo.
+    const dsM = p.match(/^\/lab\/datasets\/([^/]+)$/);
+    if (dsM && req.method === 'GET') {
+      const name = normalizeSiteName(decodeURIComponent(dsM[1]));
+      if (!name) return send(res, 400, { error: 'invalid dataset name' });
+      const dataset = await inspectDataset(name, { force: url.searchParams.get('refresh') === '1' });
+      if (!dataset.exists && BUILTIN_SITES.includes(name)) {
+        dataset.fallback = `tools/screenshot-diff/lib/sot.${name}.yml`;
+        dataset.message = `No published sheet; the workflow uses the committed ${dataset.fallback}.`;
+      }
+      return send(res, 200, dataset);
+    }
+
+    // Baseline + trend: per-page diff scores of every published run, compared
+    // with the accepted baseline and the previous run (visualHistory.js).
+    if (p === '/lab/history/run' && req.method === 'GET') {
+      const site = url.searchParams.get('site') || '';
+      if (!history.isSafeName(site)) return send(res, 400, { error: 'bad site' });
+      try {
+        return send(res, 200, await history.runReport(site, url.searchParams.get('run') || undefined));
+      } catch (e) {
+        return send(res, e.status || 502, { error: String(e.message || e) });
+      }
+    }
+    if (p === '/lab/history/trend' && req.method === 'GET') {
+      const site = url.searchParams.get('site') || '';
+      if (!history.isSafeName(site)) return send(res, 400, { error: 'bad site' });
+      return send(res, 200, await history.trend(site, Number(url.searchParams.get('limit')) || history.TREND_RUNS));
+    }
+    if (p === '/lab/history/baseline' && req.method === 'POST') {
+      const { site, runId, keys, reset } = await readBody(req);
+      if (!history.isSafeName(site)) return send(res, 400, { error: 'bad site' });
+      try {
+        if (reset) return send(res, 200, await history.resetBaseline(site, keys));
+        if (!history.isSafeName(runId)) return send(res, 400, { error: 'bad run id' });
+        return send(res, 200, await history.acceptBaseline(site, runId, keys));
+      } catch (e) {
+        return send(res, e.status || 500, { error: String(e.message || e) });
+      }
+    }
+
+    // Repo -> datasets mapping, so any repo (not just milo) can run "its"
+    // visual diff: from a Releases card, or from its own CI with
+    //   curl -X POST $NALA/lab/repo-runs -d '{"repo":"adobecom/da-cc"}'
+    if (p === '/lab/repo-datasets' && req.method === 'GET') {
+      return send(res, 200, { repos: repoDatasets() });
+    }
+    if (p === '/lab/repo-datasets' && req.method === 'PUT') {
+      const { repo, datasets } = await readBody(req);
+      const list = setRepoDatasets(repo, datasets);
+      if (!list) return send(res, 400, { error: 'repo must look like owner/name' });
+      return send(res, 200, { repo: normalizeRepo(repo), datasets: list, repos: repoDatasets() });
+    }
+    if (p === '/lab/repo-runs' && req.method === 'POST') {
+      const body = await readBody(req);
+      const repo = normalizeRepo(body.repo);
+      if (!repo) return send(res, 400, { error: 'repo must look like owner/name' });
+      const datasets = Array.isArray(body.datasets) && body.datasets.length
+        ? body.datasets.map(normalizeSiteName).filter((d) => datasetsForRepo(repo).includes(d))
+        : datasetsForRepo(repo);
+      if (!datasets.length) return send(res, 404, { error: `No datasets mapped to ${repo}. Map some on the Releases page.` });
+      const started = [];
+      const errors = [];
+      for (const site of datasets) {
+        try {
+          const run = createRun({ site, milolibs: body.milolibs });
+          started.push({ runId: run.id, site, resultsUrl: run.resultsUrl });
+        } catch (e) {
+          errors.push({ site, error: String(e.message || e) });
+        }
+      }
+      return send(res, started.length ? 200 : 409, { repo, runs: started, errors });
     }
 
     const delM = p.match(/^\/lab\/sites\/([^/]+)$/);
@@ -180,7 +270,9 @@ const server = http.createServer(async (req, res) => {
 
     // Release (stage -> main) PRs per repo: sign-offs, checks, bundled PRs.
     if (p === '/lab/releases/repos' && req.method === 'GET') {
-      return send(res, 200, { repos: releaseRepos().map(({ id, name }) => ({ id, name })) });
+      return send(res, 200, {
+        repos: releaseRepos().map(({ id, name }) => ({ id, name, datasets: datasetsForRepo(id) })),
+      });
     }
     if (p === '/lab/releases' && req.method === 'GET') {
       try {
@@ -191,8 +283,16 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    // Finished screenshot runs carry their baseline counts (new / changed /
+    // fixed) so Recent runs can flag regressions without opening the viewer.
     if (p === '/lab/runs' && req.method === 'GET') {
-      return send(res, 200, listRuns());
+      const list = listRuns();
+      await Promise.all(list.map(async (run) => {
+        if (run.runKind === 'screenshot' && run.done && run.mode === 'live') {
+          run.history = await history.runSummary(run.site, run.runId).catch(() => null);
+        }
+      }));
+      return send(res, 200, list);
     }
 
     if (p === '/lab/runs' && req.method === 'POST') {
@@ -233,6 +333,15 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// Score a finished run once its results are published (the workflow's
+// publish step lands a few seconds after the GitHub run completes).
+onRunFinished((run) => {
+  if (run.runKind !== 'screenshot' || run.mode !== 'live' || !history.isSafeName(run.site)) return;
+  setTimeout(() => history.ensureMetrics(run.site, run.runId).catch((e) => {
+    console.warn(`[nala-lab] history: ${run.site}/${run.runId} not scored:`, e.message);
+  }), 15000);
+});
+
 const wss = new WebSocketServer({ server, path: '/lab/stream' });
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
@@ -246,5 +355,11 @@ server.listen(PORT, () => {
   } else {
     // The first runner scan walks two weeks of job history; do it before anyone opens /runners.
     getRunnerStatus().catch((e) => console.warn('[nala-lab] runner status warm-up failed:', e.message));
+  }
+  // Score already-published runs (S3 keeps only ~3 per dataset, so this is
+  // what seeds the trend after a deploy). Serial and low priority.
+  if (process.env.HISTORY_BACKFILL !== '0') {
+    setTimeout(() => history.backfill(allSites(getCustomSites()))
+      .catch((e) => console.warn('[nala-lab] history backfill failed:', e.message)), 30000);
   }
 });

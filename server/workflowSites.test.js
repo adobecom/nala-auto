@@ -12,3 +12,13 @@ test('maps custom sites to the workflow custom input', () => {
     custom_site: 'bacom-live-qa',
   });
 });
+
+test('site groups put unknown custom datasets in CUSTOM only', async () => {
+  const { siteGroups, allSites } = await import('./workflowSites.js');
+  const groups = siteGroups(['milo', 'bacom-live-qa']);
+  assert.ok(groups.MILOCORE.includes('milo'));
+  assert.deepEqual(groups.CUSTOM, ['bacom-live-qa']);
+  const all = allSites(['bacom-live-qa']);
+  assert.ok(all.includes('milo') && all.includes('graybox-cc') && all.includes('bacom-live-qa'));
+  assert.equal(new Set(all).size, all.length);
+});

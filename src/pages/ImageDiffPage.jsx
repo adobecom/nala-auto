@@ -3,6 +3,8 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import ImageDiff from '../components/ImageDiff';
 import Header from '../components/Header';
 import { resultsPath, RUN_QUERY_PARAM } from '../lib/resultPaths';
+import Sparkline from '../components/Sparkline';
+import { useRunHistory, useTrend, acceptBaseline, resetBaseline } from '../lib/visualHistory';
 
 async function getData(path, onProgress) {
   try {
@@ -108,6 +110,31 @@ const ImageDiffPage = () => {
     getRunIndex(directory).then(setRuns);
   }, [directory]);
 
+  // Baseline/trend report for the run on screen (latest when ?run= fell back).
+  const shownRunId = runMissing ? null : runId;
+  const { report, reload } = useRunHistory(loading ? '' : directory, shownRunId);
+  const trend = useTrend(directory);
+  const [baselineBusy, setBaselineBusy] = useState(false);
+  const [baselineError, setBaselineError] = useState('');
+  const accept = async (keys) => {
+    if (!report?.runId) return;
+    setBaselineBusy(true);
+    setBaselineError('');
+    try {
+      await acceptBaseline(directory, report.runId, keys);
+      reload();
+    } catch (e) {
+      setBaselineError(String(e.message || e));
+    } finally {
+      setBaselineBusy(false);
+    }
+  };
+  const reset = async () => {
+    if (!window.confirm(`Clear the accepted baseline for ${directory}? Runs will be compared to the previous run again.`)) return;
+    await resetBaseline(directory).catch(() => {});
+    reload();
+  };
+
   const selectRun = (id) => {
     const next = new URLSearchParams(searchParams);
     if (id) next.set(RUN_QUERY_PARAM, id);
@@ -174,7 +201,53 @@ const ImageDiffPage = () => {
               runs 24 hours) or finished before per-run history was enabled.
             </div>
           )}
-          <ImageDiff data={data} timestamp={timestamp} isDarkMode={isDarkMode} />
+          {report && report.state !== 'error' && (
+            <div className={`flex flex-wrap items-center gap-3 border-b px-4 py-1.5 text-xs ${isDarkMode ? 'border-gray-700 bg-gray-900 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'}`}>
+              {report.state === 'pending' ? (
+                <span>Scoring this run against the baseline… (large datasets take a few minutes)</span>
+              ) : (
+                <>
+                  <span className="font-semibold">
+                    vs {report.baselineSize ? `baseline (${report.baselineSize} pages)` : report.previousRunId ? `previous run #${report.previousRunId}` : 'nothing yet (first scored run)'}:
+                  </span>
+                  <span className="text-amber-600">{report.counts.changed} changed</span>
+                  <span className="text-sky-600">{report.counts.new} new</span>
+                  {report.counts.missing > 0 && <span className="text-rose-600" title={report.missing.join(', ')}>{report.counts.missing} missing</span>}
+                  <span className="text-emerald-600">{report.counts.unchanged} same</span>
+                  {report.counts.flaky > 0 && <span title="Diff % keeps jumping between runs">{report.counts.flaky} flaky</span>}
+                  {trend?.runs?.length > 1 && (
+                    <span className="flex items-center gap-1 text-indigo-500">
+                      <Sparkline
+                        values={trend.runs.map((r) => r.avgDiffPct)}
+                        title={`Average diff % over the last ${trend.runs.length} runs`}
+                      />
+                      avg {trend.runs[trend.runs.length - 1].avgDiffPct}%
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={baselineBusy}
+                    onClick={() => accept()}
+                    className="ml-auto rounded border border-indigo-400 px-2 py-0.5 font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 dark:hover:bg-indigo-950"
+                    title="Every page of this run becomes the expected state; later runs are compared to it"
+                  >
+                    {baselineBusy ? 'Saving…' : 'Accept run as baseline'}
+                  </button>
+                  {report.baselineSize > 0 && (
+                    <button type="button" onClick={reset} className="hover:underline">Reset baseline</button>
+                  )}
+                  {baselineError && <span className="text-rose-600">{baselineError}</span>}
+                </>
+              )}
+            </div>
+          )}
+          <ImageDiff
+            data={data}
+            timestamp={timestamp}
+            isDarkMode={isDarkMode}
+            history={report?.state === 'ready' ? report : null}
+            onAcceptBaseline={accept}
+          />
         </>
       )}
     </div>

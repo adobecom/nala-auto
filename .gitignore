@@ -30,6 +30,8 @@ server/package-lock.json
 # Run console persisted run state (runtime only)
 server/.runs.json
 server/.custom-sites.json
+server/.repo-datasets.json
+server/.history/
 
 # Server-side screenshot thumbnail cache (runtime only)
 server/.thumb-cache/

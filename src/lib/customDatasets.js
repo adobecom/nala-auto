@@ -43,20 +43,34 @@ function notifyChanged() {
   window.dispatchEvent(new Event(CUSTOM_DATASETS_EVENT));
 }
 
-// Returns the normalized name on success, or null if the input was empty /
-// invalid, or the server rejected it.
-export async function addCustomDataset(rawName) {
+// Adds a dataset after the server checked its sheet is published.
+// Returns { name } on success, or { error, dataset } — `dataset` (the sheet
+// inspection) is set when the sheet is missing, so the caller can offer
+// "add anyway" via `force`.
+export async function addCustomDataset(rawName, { force = false } = {}) {
   const name = normalizeDatasetName(rawName);
-  if (!name) return null;
+  if (!name) return { error: 'Enter a valid dataset name (letters, numbers, hyphens).' };
   try {
     const res = await fetch('/lab/sites', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, force }),
     });
-    if (!res.ok) return null;
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: body.error || `Server rejected the dataset (HTTP ${res.status}).`, dataset: body.dataset || null };
     notifyChanged();
-    return name;
+    return { name, dataset: body.dataset || null };
+  } catch (e) {
+    return { error: String(e.message || e) };
+  }
+}
+
+/** Sheet preview for a dataset: { exists, pages, waitStrategy, sample, message, url, ... }. */
+export async function fetchDatasetInfo(name, { refresh = false } = {}) {
+  try {
+    const res = await fetch(`/lab/datasets/${encodeURIComponent(name)}${refresh ? '?refresh=1' : ''}`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    return await res.json();
   } catch {
     return null;
   }

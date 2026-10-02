@@ -1,8 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { fetchCustomDatasets, CUSTOM_DATASETS_EVENT } from '../lib/customDatasets';
-import { SITE_GROUPS } from '../lib/sites';
+import { useSiteGroups } from '../lib/useSiteGroups';
 
 const PAGES = [
   { title: 'Dashboard', url: '/', type: 'Page' },
@@ -21,23 +20,15 @@ const Header = ({ isDarkMode, handleThemeToggle }) => {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
-  const [customDatasets, setCustomDatasets] = useState([]);
+  const groups = useSiteGroups();
   const searchRef = useRef(null);
   const inputRef = useRef(null);
 
-  useEffect(() => {
-    const refresh = () => fetchCustomDatasets().then(setCustomDatasets);
-    refresh();
-    window.addEventListener(CUSTOM_DATASETS_EVENT, refresh);
-    return () => window.removeEventListener(CUSTOM_DATASETS_EVENT, refresh);
-  }, []);
-
   const entries = useMemo(() => {
-    const groups = customDatasets.length ? { ...SITE_GROUPS, CUSTOM: customDatasets } : SITE_GROUPS;
     const sites = Object.entries(groups).flatMap(([group, items]) =>
       items.map((site) => ({ title: site, url: `/imagediff/${site}`, type: group })));
     return [...PAGES, ...sites];
-  }, [customDatasets]);
+  }, [groups]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
