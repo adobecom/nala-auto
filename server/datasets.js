@@ -33,8 +33,8 @@ function col(row, name) {
 const isTruthy = (v) => /^(y|yes|true|x|1)$/i.test(v || '');
 const splitSelectors = (v) => String(v || '').split(/[\n;]+/).map((s) => s.trim()).filter(Boolean);
 
-// Sheet rows -> summary of what will actually run.
-export function summarizeRows(rows) {
+// Sheet rows -> the pages the workflow will run, plus skip counts.
+export function pagesFromRows(rows) {
   let waitStrategy = '';
   const pages = [];
   let ignored = 0;
@@ -62,6 +62,12 @@ export function summarizeRows(rows) {
     if (mask.length) page.mask = mask;
     pages.push(page);
   });
+  return { waitStrategy, pages, ignored, invalid };
+}
+
+// Sheet rows -> summary of what will actually run.
+export function summarizeRows(rows) {
+  const { waitStrategy, pages, ignored, invalid } = pagesFromRows(rows);
   return {
     waitStrategy: waitStrategy || 'default',
     pages: pages.length,
@@ -125,6 +131,12 @@ export async function inspectDataset(name, { force = false, fetchImpl = fetch } 
   }
   cache.set(name, { at: Date.now(), value });
   return value;
+}
+
+// Every runnable page of a published dataset ([] when it can't be read).
+export async function listDatasetPages(name, { fetchImpl = fetch } = {}) {
+  const live = await fetchStatus(datasetUrl(name), fetchImpl);
+  return live.json ? pagesFromRows(extractRows(live.json)).pages : [];
 }
 
 export const __test = { cache };

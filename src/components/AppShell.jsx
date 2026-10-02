@@ -18,6 +18,7 @@ const SECTIONS = [
     title: 'Screenshot diff',
     items: [
       { label: 'Run a dataset', hint: 'Diff a whole site dataset', to: '/console', icon: '▶', status: 'screenshot' },
+      { label: 'PR check', hint: 'Paste a PR, run affected checks', to: '/pr', icon: '⇄' },
       { label: 'Quick URL check', hint: 'Diff a few pasted URLs', to: '/console?mode=quick', icon: '⚡' },
       { label: 'Compare with Figma', hint: 'Page vs. Figma design', to: '/console?mode=figma', icon: '◧' },
     ],
@@ -40,6 +41,7 @@ const SECTIONS = [
 const isActive = (location, to) => {
   const [path, query = ''] = to.split('?');
   if (path === '/') return location.pathname === '/';
+  if (path === '/pr') return location.pathname === '/pr' || location.pathname.startsWith('/pr/');
   if (location.pathname !== path) return false;
   const mode = new URLSearchParams(query).get('mode');
   return (new URLSearchParams(location.search).get('mode') || null) === mode;
@@ -48,6 +50,7 @@ const isActive = (location, to) => {
 // Which /help section the floating "?" button opens for the current page.
 const helpAnchorFor = ({ pathname, search }) => {
   if (pathname.startsWith('/imagediff')) return 'results';
+  if (pathname === '/pr' || pathname.startsWith('/pr/')) return 'pr-check';
   if (pathname === '/console') {
     const mode = new URLSearchParams(search).get('mode');
     return mode === 'quick' ? 'quick' : mode === 'figma' ? 'figma' : 'console';

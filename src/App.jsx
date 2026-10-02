@@ -15,6 +15,7 @@ const BcAgentPage = lazy(() => import('./pages/BcAgentPage'));
 const RunnersPage = lazy(() => import('./pages/RunnersPage'));
 const ReleasesPage = lazy(() => import('./pages/ReleasesPage'));
 const ImageDiffPage = lazy(() => import('./pages/ImageDiffPage'));
+const PrCheckPage = lazy(() => import('./pages/PrCheckPage'));
 const HelpPage = lazy(() => import('./pages/HelpPage'));
 
 const PageFallback = () => (
@@ -36,6 +37,8 @@ function App() {
               <Route path="/runners" element={<RunnersPage />} />
               <Route path="/releases" element={<ReleasesPage />} />
               <Route path="/imagediff/:directory" element={<ImageDiffPage />} />
+              <Route path="/pr" element={<PrCheckPage />} />
+              <Route path="/pr/:id" element={<PrCheckPage />} />
               <Route path="/help" element={<HelpPage />} />
             </Route>
           </Routes>

@@ -31,6 +31,7 @@ server/package-lock.json
 server/.runs.json
 server/.custom-sites.json
 server/.repo-datasets.json
+server/.pr-checks.json
 server/.history/
 
 # Server-side screenshot thumbnail cache (runtime only)

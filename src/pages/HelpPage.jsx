@@ -87,6 +87,23 @@ const SECTIONS = [
     ),
   },
   {
+    id: 'pr-check',
+    title: 'PR check',
+    body: (
+      <>
+        <p>Verify a pull request in one step: paste its link and nala-auto picks and runs the checks that cover it.</p>
+        <Steps items={[
+          <span key="paste">Open <b>PR check</b>, paste a link such as <Code>https://github.com/adobecom/milo/pull/1234</Code> (or <Code>adobecom/milo#1234</Code>) and click <b>Plan checks</b>.</span>,
+          <span key="plan">Review the plan. <b>PR test URLs</b> come from the description (Before/After pairs are compared directly); <b>Changed blocks</b> are dataset pages matching blocks touched by the PR; <b>Full datasets</b> are offered for Milo PRs that change shared code; <b>Brand Concierge</b> is offered when BC files change.</span>,
+          <span key="run">Untick what you don&apos;t need and click <b>Run checks</b>. Milo PRs load the branch with <Code>?milolibs=</Code>; consumer-repo PRs compare the <Code>main</Code> preview with the branch preview.</span>,
+          <span key="verdict">The check page refreshes until every run finishes and shows one verdict — <b>Looks good</b>, <b>Needs review</b> or <b>Failed</b> — with the flagged pages and links to each report.</span>,
+        ]}
+        />
+        <p>Quick runs are flagged when a page differs by more than 1% or its height moves more than 40px; dataset runs are flagged when a page changed vs. the accepted baseline (flaky pages are ignored). Blocks listed as <b>not covered</b> have no test page — check them by hand or add rows to a dataset.</p>
+      </>
+    ),
+  },
+  {
     id: 'quick',
     title: 'Quick URL check',
     body: (

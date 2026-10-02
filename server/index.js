@@ -8,7 +8,8 @@ import * as gh from './github.js';
 import { createRun, getRun, attachClient, listRuns, onRunFinished } from './runner.js';
 import { getCustomSites, addCustomSite, removeCustomSite, normalizeSiteName } from './customSites.js';
 import { BUILTIN_SITES, allSites, siteGroups } from './workflowSites.js';
-import { inspectDataset } from './datasets.js';
+import { inspectDataset, listDatasetPages } from './datasets.js';
+import * as prCheck from './prCheck.js';
 import { repoDatasets, datasetsForRepo, setRepoDatasets, normalizeRepo } from './repoDatasets.js';
 import * as history from './visualHistory.js';
 import { manualSessionConfig, createManualSession, endManualSession } from './manualSessions.js';
@@ -19,6 +20,14 @@ import { getReleasePrs, releaseRepos } from './releasePrs.js';
 import { getThumbnail, isSafeScreenshotPath, CACHE_CONTROL } from './thumbnails.js';
 
 const PORT = process.env.LAB_PORT || 4000;
+
+const prCheckDeps = {
+  ghGet: gh.ghGet,
+  datasetsForRepo,
+  listDatasetPages,
+  allDatasets: () => [...new Set(Object.values(repoDatasets()).flat())],
+  searchDatasets: () => allSites(getCustomSites()),
+};
 
 function send(res, status, body, headers = {}) {
   const data = Buffer.isBuffer(body) || typeof body === 'string' ? body : JSON.stringify(body);
@@ -251,6 +260,37 @@ const server = http.createServer(async (req, res) => {
         }
       }
       return send(res, started.length ? 200 : 409, { repo, runs: started, errors });
+    }
+
+    // PR check: paste a PR link -> plan the affected checks -> run -> one verdict.
+    //   POST /lab/pr-checks/plan {url}            preview what would run
+    //   POST /lab/pr-checks {url, testUrls, blocks, bc, datasets}
+    //   GET  /lab/pr-checks, GET /lab/pr-checks/<id>
+    if (p === '/lab/pr-checks/plan' && req.method === 'POST') {
+      const { url } = await readBody(req);
+      try {
+        return send(res, 200, await prCheck.buildPlan(url, prCheckDeps));
+      } catch (e) {
+        return send(res, e.status || 502, { error: String(e.message || e) });
+      }
+    }
+    if (p === '/lab/pr-checks' && req.method === 'POST') {
+      const body = await readBody(req);
+      try {
+        const check = prCheck.startCheck(await prCheck.buildPlan(body.url, prCheckDeps), body, { createRun });
+        return send(res, 201, await prCheck.summarize(check, { getRun, history }));
+      } catch (e) {
+        return send(res, e.status || 502, { error: String(e.message || e) });
+      }
+    }
+    if (p === '/lab/pr-checks' && req.method === 'GET') {
+      return send(res, 200, { checks: prCheck.listChecks() });
+    }
+    const pcM = p.match(/^\/lab\/pr-checks\/([\w-]+)$/);
+    if (pcM && req.method === 'GET') {
+      const check = prCheck.getCheck(pcM[1]);
+      if (!check) return send(res, 404, { error: 'PR check not found' });
+      return send(res, 200, await prCheck.summarize(check, { getRun, history }));
     }
 
     const delM = p.match(/^\/lab\/sites\/([^/]+)$/);

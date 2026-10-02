@@ -77,6 +77,33 @@ API:
 - `GET /lab/history/trend?site=`
 - `POST /lab/history/baseline {site, runId, keys?}` or `{site, reset: true}`
 
+### PR check
+
+`/pr` takes a PR link, picks the checks that cover it, starts them and rolls them up into one verdict (`server/prCheck.js`).
+
+- **PR test URLs** come from the PR description. Before/After pairs are compared directly.
+  - For Milo PRs, any other URL is compared with and without `?milolibs=<branch>`; branches from forks use `<branch>--milo--<owner>`.
+  - For consumer-repo PRs, the `main--repo--owner.aem.page` preview is compared with the branch preview.
+- **Changed blocks**: dataset pages whose key or path matches a `blocks/<name>/` folder touched by the PR. There are at most 5 pages per block. Blocks with no page are reported as not covered.
+- **Full datasets**: offered only for Milo PRs. They are recommended when shared (non-block) code changes and run with the PR's `milolibs`.
+- **Brand Concierge**: offered when `brand-concierge` files change and the PR has a test URL.
+
+Quick runs use the chrome and iphone viewports. A quick-run page is flagged when its A/B diff is over 1% or its height moves more than 40px. A dataset page is flagged when it changed vs. the baseline and is not flaky.
+
+Checks are kept in `server/.pr-checks.json` (override with `PR_CHECKS_FILE`); the newest 50 are kept.
+
+API:
+
+```bash
+curl -X POST https://nala-auto.corp.adobe.com/lab/pr-checks/plan -H 'content-type: application/json' \
+  -d '{"url":"https://github.com/adobecom/milo/pull/1234"}'
+# Start: omitted keys use the plan's recommendation
+curl -X POST https://nala-auto.corp.adobe.com/lab/pr-checks -H 'content-type: application/json' \
+  -d '{"url":"adobecom/milo#1234","testUrls":true,"blocks":true,"bc":false,"datasets":["milo"]}'
+curl https://nala-auto.corp.adobe.com/lab/pr-checks        # recent checks
+curl https://nala-auto.corp.adobe.com/lab/pr-checks/<id>   # summary + verdict
+```
+
 ## Runners
 
 `/runners` (backed by `GET /lab/runners`) shows the self-hosted Mac mini pool:
