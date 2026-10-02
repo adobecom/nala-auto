@@ -7,7 +7,7 @@ import Header from '../components/Header';
 const SHEET_BASE = 'https://milo.adobe.com/drafts/nala/screenshotdiff/data/';
 
 const Code = ({ children }) => (
-  <code className="rounded bg-gray-100 px-1 py-0.5 text-[0.85em]">{children}</code>
+  <code className="rounded bg-gray-100 px-1 py-0.5 text-[0.85em] dark:bg-gray-800">{children}</code>
 );
 Code.propTypes = { children: PropTypes.node.isRequired };
 
@@ -19,7 +19,7 @@ const Steps = ({ items }) => (
 Steps.propTypes = { items: PropTypes.arrayOf(PropTypes.node).isRequired };
 
 const Tip = ({ children }) => (
-  <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-indigo-900">
+  <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-200">
     {children}
   </div>
 );
@@ -147,11 +147,11 @@ const SECTIONS = [
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b">
+              <tr className="border-b dark:border-gray-700">
                 <th className="py-1 pr-3">Column</th><th className="py-1 pr-3">Example</th><th className="py-1">Meaning</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y dark:divide-gray-800">
               <tr><td className="py-1 pr-3"><Code>key</Code></td><td className="pr-3">accordion</td><td>Name of the page in results.</td></tr>
               <tr><td className="py-1 pr-3"><Code>a</Code></td><td className="pr-3">https://main--milo…/accordion</td><td>Baseline URL.</td></tr>
               <tr><td className="py-1 pr-3"><Code>b</Code></td><td className="pr-3">https://stage--milo…/accordion</td><td>Optional. Compared URL; if empty, A + the run’s query string is used.</td></tr>
@@ -314,7 +314,7 @@ export default function HelpPage() {
               <li key={s.id}>
                 <a
                   href={`#${s.id}`}
-                  className={`block rounded px-2 py-1 ${location.hash === `#${s.id}` ? 'bg-indigo-600 text-white' : 'hover:bg-gray-200'}`}
+                  className={`block rounded px-2 py-1 ${location.hash === `#${s.id}` ? 'bg-indigo-600 text-white' : 'hover:bg-gray-200 dark:hover:bg-gray-800'}`}
                 >
                   {s.title}
                 </a>
@@ -331,7 +331,7 @@ export default function HelpPage() {
             <section
               key={s.id}
               id={s.id}
-              className={`scroll-mt-4 space-y-2 rounded-xl border p-4 text-sm leading-relaxed shadow-sm [&_a]:text-indigo-600 [&_a:hover]:underline ${card}`}
+              className={`scroll-mt-4 space-y-2 rounded-xl border p-4 text-sm leading-relaxed shadow-sm [&_a]:text-indigo-600 [&_a:hover]:underline dark:[&_a]:text-indigo-400 ${card}`}
             >
               <h2 className="text-lg font-semibold">
                 <a href={`#${s.id}`} className="!text-inherit">{s.title}</a>
