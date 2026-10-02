@@ -82,6 +82,7 @@ const SECTIONS = [
         ]}
         />
         <p>The dataset dropdown shows how long the last run of each dataset took (<i>milo · last 18m</i>), so you can plan around long runs.</p>
+        <p><b>Parallel</b> splits each viewport&apos;s pages across several runners, so big datasets finish sooner. <i>Auto</i> uses about 12 pages per job and only the runners that other runs are not using. Pick ×1 to ×4 to override.</p>
         <p>Recent runs show baseline badges (<i>changed / new / missing / flaky</i>) once scoring finishes — usually within a minute of the run ending.</p>
         <Tip>“Mock mode” in the console means the backend has no GitHub token and runs are simulated. Production is always live.</Tip>
       </>

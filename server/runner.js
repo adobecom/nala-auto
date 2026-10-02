@@ -34,6 +34,7 @@ const PLAIN_FIELDS = [
   'id', 'kind', 'site', 'milolibs', 'device', 'devices', 'iosVersions', 'maxUrls',
   'mode', 'startedAt', 'finishedAt', 'ghRunId', 'htmlUrl', 'status', 'conclusion', 'note', 'jobs',
   'resultsUrl', 'latestResultsUrl', 'done', 'urls', 'viewports', 'figmaUrl', 'figmaFileKey', 'figmaNodeId', 'selector',
+  'shards', 'shardsRequested', 'pages',
 ];
 
 export const VIEWPORTS = ['chrome', 'ipad', 'iphone'];
@@ -92,6 +93,57 @@ const pairRunnable = (d, v) => cmpVer(v, IOS_MIN[d] || '0') >= 0;
 export const IOS_RUNNERS = Math.max(1, Number(process.env.IOS_RUNNERS || 4));
 export const shardsFor = (combos) => Math.max(1, Math.floor(IOS_RUNNERS / Math.max(1, combos)));
 
+// A dataset run is 3 viewport jobs; big datasets also split each viewport into
+// up to MAX_SHARDS page slices (the workflow's `shards` input) so idle
+// screendiff runners share the load. Auto picks ~PAGES_PER_SHARD pages per job,
+// limited by runners not already taken by other in-flight runs.
+export const SCREEN_RUNNERS = Math.max(3, Number(process.env.SCREEN_RUNNERS || 11));
+export const PAGES_PER_SHARD = Math.max(1, Number(process.env.PAGES_PER_SHARD || 12));
+export const MAX_SHARDS = 4;
+export function planShards(pages, freeRunners, viewports = VIEWPORTS.length) {
+  if (!(pages > 0)) return 1;
+  const byPages = Math.ceil(pages / PAGES_PER_SHARD);
+  const byRunners = Math.floor(freeRunners / viewports);
+  return Math.max(1, Math.min(MAX_SHARDS, byPages, byRunners));
+}
+
+// index.js wires this to the dataset sheet; resolves to the page count (0 = unknown).
+let pageCounter = async () => 0;
+export function setPageCounter(fn) {
+  pageCounter = fn;
+}
+
+const screenJobs = (r) =>
+  r.kind === 'screenshot' ? VIEWPORTS.length * (r.shards || 1) : r.kind === 'figma' ? 1 : r.kind === 'quick' ? (r.viewports || []).length : 0;
+export const freeScreenRunners = (self = null) =>
+  SCREEN_RUNNERS - [...runs.values()].filter((r) => r !== self && !r.done).reduce((n, r) => n + screenJobs(r), 0);
+
+export async function shardPlan(site) {
+  const pages = await pageCounter(site).catch(() => 0);
+  const free = freeScreenRunners();
+  return { site, pages, freeRunners: free, shards: planShards(pages, free), maxShards: MAX_SHARDS, pagesPerShard: PAGES_PER_SHARD };
+}
+
+// Resolved one at a time so runs started together (PR check, repo runs) see
+// the runners each earlier one claimed.
+let shardQueue = Promise.resolve();
+function resolveShards(run) {
+  const next = shardQueue.then(() => pickShards(run));
+  shardQueue = next.catch(() => {});
+  return next;
+}
+
+async function pickShards(run) {
+  if (run.kind !== 'screenshot') return;
+  const asked = Number(run.shardsRequested);
+  if (Number.isInteger(asked) && asked >= 1 && asked <= MAX_SHARDS) {
+    run.shards = asked;
+    return;
+  }
+  run.pages = await pageCounter(run.site).catch(() => 0);
+  run.shards = planShards(run.pages, freeScreenRunners(run));
+}
+
 // Build a run object from plain fields (used both for new runs and for runs
 // reloaded from disk after a restart). snapshot() reads this.* only, so a
 // reconstructed object behaves identically.
@@ -127,6 +179,8 @@ function makeRun(f) {
         done: this.done,
         startedAt: this.startedAt,
         finishedAt: this.finishedAt,
+        shards: this.shards,
+        pages: this.pages,
       };
     },
   };
@@ -197,6 +251,8 @@ export function createRun(body = {}) {
     figmaFileKey: figma?.figma.fileKey,
     figmaNodeId: figma?.figma.nodeId,
     selector: figma?.selector,
+    shards: 1,
+    shardsRequested: body.shards === undefined || body.shards === 'auto' ? 'auto' : Number(body.shards),
     mode: live ? 'live' : 'mock',
     startedAt: Date.now(),
     ghRunId: null,
@@ -332,10 +388,16 @@ export function inputsFor(run) {
       selector: run.selector,
     };
   }
-  return { ...runId, ...screenshotSiteInputs(run.site), milo_libs: run.milolibs };
+  return {
+    ...runId,
+    ...screenshotSiteInputs(run.site),
+    milo_libs: run.milolibs,
+    ...(run.shards > 1 ? { shards: String(run.shards) } : {}),
+  };
 }
 
 async function driveLive(run) {
+  await resolveShards(run);
   push(run);
   const wf = gh.workflowFor(run.kind);
   const t0 = await gh.dispatch(inputsFor(run), wf);
@@ -411,6 +473,10 @@ function loadRuns() {
 loadRuns();
 
 async function driveMock(run) {
+  await resolveShards(run);
+  if (run.kind === 'screenshot' && run.shards > 1) {
+    run.jobs = VIEWPORTS.flatMap((v) => Array.from({ length: run.shards }, (_, s) => mkJob(`${v}-${s + 1}`)));
+  }
   run.status = 'queued';
   push(run);
   await sleep(700);
@@ -425,7 +491,7 @@ async function driveMock(run) {
   const durationFor = (job, i) =>
     run.kind === 'ios'
       ? 3500 + i * 1200
-      : { chrome: 3000, ipad: 4200, iphone: 6500 }[job.name] || 3000;
+      : ({ chrome: 3000, ipad: 4200, iphone: 6500 }[job.name.split('-')[0]] || 3000) / (run.shards || 1);
 
   await Promise.all(
     run.jobs.map(async (j, i) => {

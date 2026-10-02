@@ -5,7 +5,7 @@
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import * as gh from './github.js';
-import { createRun, getRun, attachClient, listRuns, onRunFinished } from './runner.js';
+import { createRun, getRun, attachClient, listRuns, onRunFinished, setPageCounter, shardPlan } from './runner.js';
 import { getCustomSites, addCustomSite, removeCustomSite, normalizeSiteName } from './customSites.js';
 import { BUILTIN_SITES, allSites, siteGroups } from './workflowSites.js';
 import { inspectDataset, listDatasetPages } from './datasets.js';
@@ -17,8 +17,11 @@ import * as aiJudge from './aiJudge.js';
 import * as askAgent from './askAgent.js';
 import { getRunnerStatus } from './runnerStatus.js';
 import { backfillDurations, getDurations, recordDuration } from './runDurations.js';
+
 import { getReleasePrs, releaseRepos } from './releasePrs.js';
 import { getThumbnail, isSafeScreenshotPath, CACHE_CONTROL } from './thumbnails.js';
+
+setPageCounter(async (site) => (await inspectDataset(site)).pages || 0);
 
 const PORT = process.env.LAB_PORT || 4000;
 
@@ -326,6 +329,11 @@ const server = http.createServer(async (req, res) => {
 
     // Finished screenshot runs carry their baseline counts (new / changed /
     // fixed) so Recent runs can flag regressions without opening the viewer.
+    if (p === '/lab/shard-plan' && req.method === 'GET') {
+      const site = normalizeSiteName(url.searchParams.get('site') || '');
+      if (!site) return send(res, 400, { error: 'site required' });
+      return send(res, 200, await shardPlan(site));
+    }
     if (p === '/lab/durations' && req.method === 'GET') {
       return send(res, 200, getDurations());
     }
@@ -382,7 +390,7 @@ const server = http.createServer(async (req, res) => {
 onRunFinished((run) => {
   recordDuration({
     kind: run.runKind, site: run.site, runId: run.runId,
-    startedAt: run.startedAt, finishedAt: run.finishedAt, conclusion: run.conclusion,
+    startedAt: run.startedAt, finishedAt: run.finishedAt, conclusion: run.conclusion, shards: run.shards,
   });
   if (run.runKind !== 'screenshot' || run.mode !== 'live' || !history.isSafeName(run.site)) return;
   setTimeout(() => history.ensureMetrics(run.site, run.runId).catch((e) => {

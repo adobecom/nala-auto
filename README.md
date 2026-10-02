@@ -55,6 +55,13 @@ The server records each dataset's last finished run time (`GET /lab/durations`,
 stored in `server/.run-durations.json`), and the dataset dropdown shows it, for
 example `milo · last 18m`. On startup it backfills from recent runs.
 
+Big datasets are split across more runners. Each viewport's pages can be split
+into 1-4 shards (the fork workflow's `shards` input, so jobs are named
+`capture-chrome-1`, `capture-chrome-2`, and so on). **Auto**, the default, uses
+about 12 pages per job, capped by the runners that other in-flight nala-auto runs
+are not using (`SCREEN_RUNNERS`, default 11). `GET /lab/shard-plan?site=` shows
+the estimate. The console's **Parallel** chips override it.
+
 Optional sheet columns, read by the fork's `load-data.js`, help with flaky pages:
 
 | Column | Example | Effect |

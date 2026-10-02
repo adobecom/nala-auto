@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 process.env.RUNS_STATE_FILE = path.join(os.tmpdir(), `nala-runs-test-${process.pid}.json`);
-const { parseQuickUrls, parseBcUrl, inputsFor, createRun, QUICK_MAX_URLS } = await import('./runner.js');
+const { parseQuickUrls, parseBcUrl, inputsFor, createRun, QUICK_MAX_URLS, planShards, MAX_SHARDS } = await import('./runner.js');
 
 test('parses plain URLs and A | B pairs, skipping blanks and comments', () => {
   assert.deepEqual(
@@ -156,4 +156,20 @@ test('different datasets can run at once; the same dataset twice is refused', ()
   assert.notEqual(a.id, b.id);
   assert.throws(() => createRun({ site: 'concurrency-a' }), /already running/);
   assert.doesNotThrow(() => createRun({ kind: 'ios', site: 'concurrency-a', devices: ['iPhone 15'] }));
+});
+
+test('planShards: ~12 pages per job, capped by free runners and MAX_SHARDS', () => {
+  assert.equal(planShards(0, 11), 1);
+  assert.equal(planShards(9, 11), 1);
+  assert.equal(planShards(30, 11), 3);
+  assert.equal(planShards(62, 11), 3);
+  assert.equal(planShards(62, 12), 4);
+  assert.equal(planShards(200, 30), MAX_SHARDS);
+  assert.equal(planShards(62, 5), 1);
+  assert.equal(planShards(62, -3), 1);
+});
+
+test('screenshot inputs pass shards only when > 1', () => {
+  assert.equal(inputsFor({ kind: 'screenshot', site: 'bacom', milolibs: '', shards: 1 }).shards, undefined);
+  assert.equal(inputsFor({ kind: 'screenshot', site: 'bacom', milolibs: '', shards: 3 }).shards, '3');
 });

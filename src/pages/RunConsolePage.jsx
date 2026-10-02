@@ -104,6 +104,8 @@ const RunConsolePage = () => {
   const [runs, setRuns] = useState([]);
   // Last finished run time per dataset: { screenshot: { milo: { ms, at, conclusion } } }.
   const [durations, setDurations] = useState({});
+  const [parallel, setParallel] = useState('auto');
+  const [shardPlan, setShardPlan] = useState(null);
   // Only true while the POST is in flight: a live run elsewhere must not lock
   // the button for other datasets (the backend refuses true duplicates).
   const [submitting, setSubmitting] = useState(false);
@@ -316,7 +318,7 @@ const RunConsolePage = () => {
                 selector: figmaSelector.trim(),
                 viewports: [figmaViewport],
               }
-            : { kind, site, milolibs };
+            : { kind, site, milolibs, shards: parallel };
     try {
       const res = await fetch('/lab/runs', {
         method: 'POST',
@@ -368,6 +370,18 @@ const RunConsolePage = () => {
     fetchDatasetInfo(site).then((info) => { if (alive) setDatasetInfo(info); });
     return () => { alive = false; };
   }, [kind, site]);
+
+  // Auto parallelism estimate: page count vs runners not taken by other runs.
+  const activeRuns = runs.filter((r) => !r.done).length;
+  useEffect(() => {
+    if (kind !== 'screenshot' || !site) return undefined;
+    let alive = true;
+    fetch(`/lab/shard-plan?site=${encodeURIComponent(site)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((plan) => { if (alive) setShardPlan(plan); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [kind, site, activeRuns]);
 
   const refreshDatasetInfo = () => {
     setDatasetInfo({ loading: true, name: site });
@@ -689,6 +703,23 @@ const RunConsolePage = () => {
                     </span>
                   ))}
                 </div>
+                <div className={`mb-2 mt-4 text-sm font-medium ${subtle}`}>
+                  Parallel — split each viewport&apos;s pages across N runners
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {['auto', 1, 2, 3, 4].map((n) => (
+                    <button key={n} className={chip(parallel === n, false)} onClick={() => setParallel(n)}>
+                      {n === 'auto' ? 'Auto' : `×${n}`}
+                    </button>
+                  ))}
+                  <span className={`text-xs ${subtle}`}>
+                    {parallel === 'auto'
+                      ? shardPlan
+                        ? `Auto → ×${shardPlan.shards} (${shardPlan.pages || '?'} pages, ${Math.max(0, shardPlan.freeRunners)} free runners) = ${shardPlan.shards * 3} jobs`
+                        : 'Auto sizes by page count and free runners'
+                      : `${parallel * 3} jobs`}
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="space-y-4">
@@ -787,6 +818,7 @@ const RunConsolePage = () => {
                     <span className={`font-mono ${subtle}`}>#{r.runId}</span>
                     <span className={text}>{runLabel(r)}</span>
                     <span className={`${subtle} truncate`}>{r.site}</span>
+                    {r.shards > 1 && <span className={`text-xs ${subtle}`} title="Pages split across this many runners per viewport">×{r.shards}</span>}
                     {r.startedAt && <span className={`text-xs ${subtle}`}>{pacificTime(r.startedAt)}</span>}
                     {r.done && r.finishedAt && <span className={`text-xs ${subtle}`}>took {fmtDuration(r.finishedAt - r.startedAt)}</span>}
                     {!r.done && durations[r.runKind]?.[r.site] && (

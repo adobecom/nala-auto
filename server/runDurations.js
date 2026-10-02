@@ -31,7 +31,7 @@ function save() {
 }
 
 // Cancelled or errored runs stop early, so their time says nothing useful.
-export function recordDuration({ kind, site, runId, startedAt, finishedAt, conclusion }) {
+export function recordDuration({ kind, site, runId, startedAt, finishedAt, conclusion, shards }) {
   if (!TRACKED.has(kind) || !site || !COUNTED.has(conclusion)) return false;
   const start = typeof startedAt === 'number' ? startedAt : Date.parse(startedAt);
   const end = typeof finishedAt === 'number' ? finishedAt : Date.parse(finishedAt);
@@ -40,7 +40,7 @@ export function recordDuration({ kind, site, runId, startedAt, finishedAt, concl
   const s = load();
   const prev = s[kind]?.[site];
   if (prev && Date.parse(prev.at) >= end) return false;
-  s[kind] = { ...s[kind], [site]: { ms, at: new Date(end).toISOString(), runId, conclusion } };
+  s[kind] = { ...s[kind], [site]: { ms, at: new Date(end).toISOString(), runId, conclusion, ...(shards > 1 ? { shards } : {}) } };
   save();
   return true;
 }
@@ -56,7 +56,7 @@ export async function backfillDurations(runs, getGhRun) {
   for (const r of runs) {
     if (!r.done || !TRACKED.has(r.runKind) || s[r.runKind]?.[r.site]) continue;
     if (r.finishedAt) {
-      recordDuration({ kind: r.runKind, site: r.site, runId: r.runId, startedAt: r.startedAt, finishedAt: r.finishedAt, conclusion: r.conclusion });
+      recordDuration({ kind: r.runKind, site: r.site, runId: r.runId, startedAt: r.startedAt, finishedAt: r.finishedAt, conclusion: r.conclusion, shards: r.shards });
       continue;
     }
     if (!r.ghRunId || !getGhRun) continue;
